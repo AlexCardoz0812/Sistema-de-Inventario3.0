@@ -28,8 +28,8 @@ Este proyecto consiste en un sistema de escritorio desarrollado en Java para la 
 
 ## Autores
 
-Erick Edgardo Delgado Palacios
-Josseline Marisol Bonilla Estrada
-Alexandra Sorto
-Oscar Alexander Cardoza Recinos
+- Erick Edgardo Delgado Palacios
+- Josseline Marisol Bonilla Estrada
+- Alexandra Sorto
+- Oscar Alexander Cardoza Recinos
 
