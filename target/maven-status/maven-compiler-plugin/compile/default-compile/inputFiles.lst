@@ -1,1 +1,8 @@
-C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\mycompany\sistema_de_inventario\Sistema_de_inventario.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\conexion\ConexionMongoDB.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\dao\UsuarioDAO.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\modelos\Producto.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\modelos\Usuario.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\Sistema_de_inventario.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\utilidades\Encriptador.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\vistas\FrmLogin.java
+C:\ProyectoUESPOO\sistema_de_inventario\src\main\java\com\inventario\app\vistas\FrmPrincipal.java
