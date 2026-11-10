@@ -4,7 +4,6 @@ import com.inventario.app.dao.UsuarioDAO;
 import com.inventario.app.modelos.Usuario;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
-import java.awt.event.ActionEvent;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JFrame;

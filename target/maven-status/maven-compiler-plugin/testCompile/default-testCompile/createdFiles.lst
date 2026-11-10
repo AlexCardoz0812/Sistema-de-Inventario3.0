@@ -1,0 +1,5 @@
+com\inventario\app\servicio\InventarioServiceTest.class
+com\inventario\app\servicio\InventarioServiceTest$PruebasExcepcionesGenerales.class
+com\inventario\app\servicio\InventarioServiceTest$PruebasCalculos.class
+com\inventario\app\servicio\InventarioServiceTest$PruebasMovimientosStock.class
+com\inventario\app\servicio\InventarioServiceTest$FakeProductoDao.class
