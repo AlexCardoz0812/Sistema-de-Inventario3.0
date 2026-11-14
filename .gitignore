@@ -1,0 +1,6 @@
+dist/
+build/
+*.zip
+nbproject/private/
+
+SistemaInventario/runtime/
