@@ -21,9 +21,8 @@ Para verificar que la lógica y las conexiones funcionen correctamente, ejecuta 
 
 * **Desde la terminal (en la raíz del proyecto):**
 
-##  ```bash
+   ```bash
   mvn test
-##
 
 Credenciales de Prueba
 - **Usuario:** `admin`
