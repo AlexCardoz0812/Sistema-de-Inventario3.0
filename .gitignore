@@ -1,22 +1,41 @@
+# ==========================================
+# .gitignore para el Proyecto de Inventario
+# ==========================================
 
-# Maven
+# 1. Maven y compilación (Muy importante)
 target/
+build/
+dist/
+*.class
 
-# IntelliJ IDEA
+# 2. Ejecutables generados por jpackage (La carpeta de Óscar)
+SistemaInventario/
+*.exe
+*.msi
+*.dmg
+
+# 3. Archivos de configuración con credenciales (NUNCA subir)
+src/main/resources/config.properties
+.env
+
+# 4. Configuración de NetBeans
+nbproject/private/
+nbbuild/
+dist/
+nbdist/
+
+# 5. Configuración de otros editores (IntelliJ, VS Code, Eclipse)
 .idea/
 *.iml
-
-# Visual Studio Code
 .vscode/
-
-# Eclipse
 .classpath
 .project
 .settings/
 
-# Sistema operativo
+# 6. Archivos del sistema operativo
 .DS_Store
 Thumbs.db
 
-# Archivos de configuración local
-.env
+# 7. Archivos comprimidos (por si acaso)
+*.zip
+*.rar
