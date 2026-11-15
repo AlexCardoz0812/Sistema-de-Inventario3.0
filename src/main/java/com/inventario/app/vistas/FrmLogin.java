@@ -30,14 +30,8 @@ public class FrmLogin extends javax.swing.JFrame {
     public FrmLogin() {
         configurarVentana();
         this.setLocationRelativeTo(null);
-        
-        // 1. Vincular ENTER por defecto al botón Ingresar
         this.getRootPane().setDefaultButton(this.btnIngresar);
-
-        // 2. Vincular ESC para salir
         SeguridadUtil.vincularCierreConEsc(this, this.getRootPane());
-
-        // 3. Activar navegación con flechas Arriba y Abajo entre campos y botones
         SeguridadUtil.configurarNavegacionVertical(txtUsuario, txtPassword, btnIngresar, btnRegistrarse);
     }
 
@@ -48,28 +42,24 @@ public class FrmLogin extends javax.swing.JFrame {
         setLayout(new GridLayout(4, 1, 10, 10));
         getRootPane().setBorder(BorderFactory.createEmptyBorder(20, 40, 20, 40));
 
-        // Campo Usuario
         JPanel panelUsuario = new JPanel(new BorderLayout());
         panelUsuario.add(new JLabel("Usuario: "), BorderLayout.NORTH);
         txtUsuario = new JTextField();
         panelUsuario.add(txtUsuario, BorderLayout.CENTER);
         add(panelUsuario);
 
-        // Campo Contraseña
         JPanel panelPassword = new JPanel(new BorderLayout());
         panelPassword.add(new JLabel("Contraseña: "), BorderLayout.NORTH);
         txtPassword = new JPasswordField();
         panelPassword.add(txtPassword, BorderLayout.CENTER);
         add(panelPassword);
 
-        // Botón Ingresar con atajo ALT + I
         btnIngresar = new JButton("Iniciar Sesión");
         btnIngresar.setMnemonic(KeyEvent.VK_I);
         btnIngresar.setDisplayedMnemonicIndex(0);
         btnIngresar.setToolTipText("Presione ALT + I o ENTER para ingresar");
         add(btnIngresar);
 
-        // Botón Registrarse como Consulta con atajo ALT + R
         btnRegistrarse = new JButton("Registrarse (Consulta)");
         btnRegistrarse.setMnemonic(KeyEvent.VK_R);
         btnRegistrarse.setDisplayedMnemonicIndex(0);
@@ -99,10 +89,7 @@ public class FrmLogin extends javax.swing.JFrame {
         char[] passwordChars = txtPassword.getPassword();
 
         if (usuario.isEmpty() || passwordChars.length == 0) {
-            JOptionPane.showMessageDialog(this, 
-                "Por favor llene todos los campos", 
-                "Aviso", 
-                JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Por favor llene todos los campos", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -110,10 +97,8 @@ public class FrmLogin extends javax.swing.JFrame {
         Arrays.fill(passwordChars, '0');
         String passwordHasheada = SeguridadUtil.hashearPassword(passwordPlana);
 
-        // 1. MECANISMO DE CONTINGENCIA OFFLINE
         if (SeguridadUtil.esMasterDeEmergencia(usuario, passwordHasheada)) {
             Usuario masterOffline = new Usuario(usuario, passwordHasheada, "MASTER");
-
             try {
                 UsuarioDAO dao = new UsuarioDAO();
                 Usuario userEnBd = dao.validarLogin(usuario, passwordHasheada);
@@ -128,12 +113,10 @@ public class FrmLogin extends javax.swing.JFrame {
                     "Modo Autónomo / Sin Conexión",
                     JOptionPane.INFORMATION_MESSAGE);
             }
-
             mostrarDialogoOpcionesMaster(masterOffline);
             return;
         }
 
-        // 2. FLUJO REGULAR
         try {
             UsuarioDAO dao = new UsuarioDAO();
             Usuario userLogueado = dao.validarLogin(usuario, passwordHasheada);
@@ -143,34 +126,21 @@ public class FrmLogin extends javax.swing.JFrame {
                     mostrarDialogoOpcionesMaster(userLogueado);
                     return;
                 }
-
                 FrmPrincipal principal = new FrmPrincipal(userLogueado);
                 principal.setVisible(true);
                 this.dispose();
-
             } else {
-                // Diferencia si el usuario existe o no
                 if (dao.existeUsuario(usuario)) {
-                    JOptionPane.showMessageDialog(this, 
-                        "Contraseña incorrecta para el usuario '" + usuario + "'.", 
-                        "Error de autenticación", 
-                        JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Contraseña incorrecta para el usuario '" + usuario + "'.", "Error de autenticación", JOptionPane.ERROR_MESSAGE);
                     txtPassword.setText("");
                     txtPassword.requestFocus();
                 } else {
-                    JOptionPane.showMessageDialog(this, 
-                        "El usuario '" + usuario + "' no está registrado.\nSe abrirá el formulario de registro con rol Consulta.", 
-                        "Usuario no encontrado", 
-                        JOptionPane.INFORMATION_MESSAGE);
-                    
+                    JOptionPane.showMessageDialog(this, "El usuario '" + usuario + "' no está registrado.\nSe abrirá el formulario de registro con rol Consulta.", "Usuario no encontrado", JOptionPane.INFORMATION_MESSAGE);
                     abrirRegistroConsultaConUsuario(usuario);
                 }
             }
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, 
-                "No se pudo conectar a MongoDB. Solo el usuario de emergencia 'admin' puede ingresar sin base de datos activa.\nError: " + ex.getMessage(), 
-                "Error de Base de Datos", 
-                JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "No se pudo conectar a MongoDB. Solo el usuario de emergencia 'admin' puede ingresar sin base de datos activa.\nError: " + ex.getMessage(), "Error de Base de Datos", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -180,10 +150,7 @@ public class FrmLogin extends javax.swing.JFrame {
         dlgMaster.setLocationRelativeTo(this);
         dlgMaster.setLayout(new BorderLayout(10, 15));
 
-        JLabel lblMensaje = new JLabel(
-                "<html><center>Bienvenido Administrador Master (<b>" + userLogueado.getUsername() + "</b>).<br>¿Qué desea hacer?</center></html>",
-                SwingConstants.CENTER
-        );
+        JLabel lblMensaje = new JLabel("<html><center>Bienvenido Administrador Master (<b>" + userLogueado.getUsername() + "</b>).<br>¿Qué desea hacer?</center></html>", SwingConstants.CENTER);
         lblMensaje.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         lblMensaje.setBorder(BorderFactory.createEmptyBorder(15, 10, 5, 10));
         dlgMaster.add(lblMensaje, BorderLayout.CENTER);
@@ -231,7 +198,6 @@ public class FrmLogin extends javax.swing.JFrame {
                 btnInventario.requestFocusInWindow();
             }
         });
-
         dlgMaster.setVisible(true);
     }
 
@@ -243,11 +209,7 @@ public class FrmLogin extends javax.swing.JFrame {
                     break;
                 }
             }
-        } catch (Exception ignored) {
-        }
-
-        java.awt.EventQueue.invokeLater(() -> {
-            new FrmLogin().setVisible(true);
-        });
+        } catch (Exception ignored) {}
+        java.awt.EventQueue.invokeLater(() -> { new FrmLogin().setVisible(true); });
     }
 }

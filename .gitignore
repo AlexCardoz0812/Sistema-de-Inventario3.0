@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ==========================================
 # .gitignore para el Proyecto de Inventario
 # ==========================================
@@ -39,3 +40,12 @@ Thumbs.db
 # 7. Archivos comprimidos (por si acaso)
 *.zip
 *.rar
+=======
+target/
+dist/
+build/
+*.zip
+*.jar
+SistemaInventario/
+nbproject/private/
+>>>>>>> 2e615094717db1e922603924267c56fcf32b129c

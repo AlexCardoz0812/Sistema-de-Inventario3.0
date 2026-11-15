@@ -12,7 +12,6 @@ import org.bson.Document;
 
 public class UsuarioDAO {
 
-    // 1. Valida las credenciales comparando username y passwordHash
     public Usuario validarLogin(String username, String passwordHash) {
         try {
             MongoDatabase db = ConexionMongoDB.getDatabase();
@@ -40,7 +39,6 @@ public class UsuarioDAO {
         }
     }
 
-    // 2. Registra un nuevo usuario asegurando que no se duplique el username
     public boolean crearUsuario(Usuario nuevoUsuario) {
         try {
             MongoDatabase db = ConexionMongoDB.getDatabase();
@@ -51,19 +49,16 @@ public class UsuarioDAO {
 
             MongoCollection<Document> coleccion = db.getCollection("usuarios");
 
-            // 1. Verificación de existencia previa
             Document existente = coleccion.find(Filters.eq("username", nuevoUsuario.getUsername())).first();
             if (existente != null) {
                 System.out.println(">>> AVISO: El usuario [" + nuevoUsuario.getUsername() + "] ya existe en MongoDB.");
                 return false;
             }
 
-            // 2. Construcción del documento
             Document doc = new Document("username", nuevoUsuario.getUsername())
                     .append("passwordHash", nuevoUsuario.getPasswordHash())
                     .append("rol", nuevoUsuario.getRol());
 
-            // 3. Inserción física en Mongo
             coleccion.insertOne(doc);
             System.out.println(">>> ÉXITO: Usuario [" + nuevoUsuario.getUsername() + "] insertado correctamente con ID: " + doc.getObjectId("_id"));
             return true;
@@ -75,7 +70,6 @@ public class UsuarioDAO {
         }
     }
 
-    // 3. Obtiene la lista completa de usuarios para alimentar la barra lateral izquierda
     public List<Usuario> listarUsuarios() {
         List<Usuario> lista = new ArrayList<>();
         try {
@@ -95,7 +89,6 @@ public class UsuarioDAO {
         return lista;
     }
 
-    // 4. Actualiza rol y contraseña (si passwordHash es null o vacío, solo actualiza el rol)
     public boolean actualizarUsuario(String username, String nuevoPasswordHash, String nuevoRol) {
         try {
             MongoDatabase db = ConexionMongoDB.getDatabase();
@@ -122,7 +115,6 @@ public class UsuarioDAO {
         }
     }
 
-    // 5. Verifica si un nombre de usuario ya está registrado
     public boolean existeUsuario(String username) {
         try {
             MongoDatabase db = ConexionMongoDB.getDatabase();
@@ -137,7 +129,6 @@ public class UsuarioDAO {
         }
     }
     
-    // 6. Elimina un usuario de la base de datos (protegiendo al administrador principal)
     public boolean eliminarUsuario(String username) {
         if (username == null || username.trim().isEmpty() 
                 || com.inventario.app.utilidades.SeguridadUtil.MASTER_DEFAULT_USER.equalsIgnoreCase(username.trim())) {

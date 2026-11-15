@@ -27,12 +27,10 @@ public class DlgRegistroConsulta extends JDialog {
     private JButton btnCancelar;
     private String usuarioCreado = null;
 
-    // Constructor estándar (cuando se abre desde el botón "Registrarse (Consulta)")
     public DlgRegistroConsulta(Frame parent) {
         this(parent, "");
     }
 
-    // Constructor con usuario prellenado (cuando se dispara automáticamente desde FrmLogin)
     public DlgRegistroConsulta(Frame parent, String usuarioInicial) {
         super(parent, "Registro de Usuario - Consulta", true);
         configurarVentana();
@@ -40,7 +38,6 @@ public class DlgRegistroConsulta extends JDialog {
 
         if (usuarioInicial != null && !usuarioInicial.trim().isEmpty()) {
             txtNuevoUsuario.setText(usuarioInicial.trim());
-            // Enfoca directo la contraseña al abrirse la ventana
             addWindowListener(new java.awt.event.WindowAdapter() {
                 @Override
                 public void windowOpened(java.awt.event.WindowEvent e) {
@@ -49,12 +46,9 @@ public class DlgRegistroConsulta extends JDialog {
             });
         }
 
-        // Accesibilidad completa por teclado
         getRootPane().setDefaultButton(btnRegistrar);
         SeguridadUtil.vincularCierreConEsc(this, getRootPane());
-        SeguridadUtil.configurarNavegacionVertical(
-                txtNuevoUsuario, txtNuevaPassword, txtConfirmarPassword, btnRegistrar
-        );
+        SeguridadUtil.configurarNavegacionVertical(txtNuevoUsuario, txtNuevaPassword, txtConfirmarPassword, btnRegistrar);
     }
 
     private void configurarVentana() {
@@ -67,21 +61,18 @@ public class DlgRegistroConsulta extends JDialog {
 
         JPanel panelCampos = new JPanel(new GridLayout(3, 1, 8, 8));
 
-        // Usuario
         JPanel pUser = new JPanel(new BorderLayout());
         pUser.add(new JLabel("Nombre de usuario:"), BorderLayout.NORTH);
         txtNuevoUsuario = new JTextField();
         pUser.add(txtNuevoUsuario, BorderLayout.CENTER);
         panelCampos.add(pUser);
 
-        // Contraseña
         JPanel pPass = new JPanel(new BorderLayout());
         pPass.add(new JLabel("Contraseña:"), BorderLayout.NORTH);
         txtNuevaPassword = new JPasswordField();
         pPass.add(txtNuevaPassword, BorderLayout.CENTER);
         panelCampos.add(pPass);
 
-        // Confirmar Contraseña
         JPanel pConfirm = new JPanel(new BorderLayout());
         pConfirm.add(new JLabel("Confirmar contraseña:"), BorderLayout.NORTH);
         txtConfirmarPassword = new JPasswordField();
@@ -90,7 +81,6 @@ public class DlgRegistroConsulta extends JDialog {
 
         add(panelCampos, BorderLayout.CENTER);
 
-        // Botones
         JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 5));
         
         btnRegistrar = new JButton("Crear Cuenta");
@@ -146,22 +136,14 @@ public class DlgRegistroConsulta extends JDialog {
         }
 
         String passHash = SeguridadUtil.hashearPassword(passPlana);
-        // ROL ASIGNADO DIRECTAMENTE: "CONSULTA"
         Usuario nuevoConsulta = new Usuario(user, passHash, "CONSULTA");
 
         if (dao.crearUsuario(nuevoConsulta)) {
             this.usuarioCreado = user;
-
-            JOptionPane.showMessageDialog(this, 
-                    "Cuenta con rol Consulta creada exitosamente.\nYa puede iniciar sesión.", 
-                    "Registro Completado", 
-                    JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Cuenta con rol Consulta creada exitosamente.\nYa puede iniciar sesión.", "Registro Completado", JOptionPane.INFORMATION_MESSAGE);
             dispose();
         } else {
-            JOptionPane.showMessageDialog(this, 
-                    "No se pudo guardar el usuario. Verifique que el servicio de MongoDB esté activo.", 
-                    "Error de Conexión", 
-                    JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "No se pudo guardar el usuario. Verifique que el servicio de MongoDB esté activo.", "Error de Conexión", JOptionPane.ERROR_MESSAGE);
         }
     }
 

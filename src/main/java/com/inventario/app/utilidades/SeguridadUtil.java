@@ -1,4 +1,3 @@
-
 package com.inventario.app.utilidades;
 
 import java.awt.AWTKeyStroke;
@@ -21,14 +20,9 @@ import javax.swing.KeyStroke;
 
 public class SeguridadUtil {
 
-    // Credenciales maestras fijas de contingencia/emergencia
     public static final String MASTER_DEFAULT_USER = "admin";
-    // Hash SHA-256 de "admin123"
     public static final String MASTER_DEFAULT_HASH = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9";
 
-    /**
-     * Verifica si las credenciales ingresadas corresponden al usuario maestro de respaldo.
-     */
     public static boolean esMasterDeEmergencia(String username, String passwordHash) {
         return MASTER_DEFAULT_USER.equalsIgnoreCase(username != null ? username.trim() : "") 
                 && MASTER_DEFAULT_HASH.equalsIgnoreCase(passwordHash);
@@ -55,10 +49,6 @@ public class SeguridadUtil {
         }
     }
 
-    /**
-     * Vincula la tecla ESC a cualquier ventana (JFrame o JDialog)
-     * para cerrarla con dispose() sin importar qué componente tenga el foco.
-     */
     public static void vincularCierreConEsc(Window ventana, JRootPane rootPane) {
         rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cerrarVentanaConEsc");
@@ -71,27 +61,19 @@ public class SeguridadUtil {
         });
     }
 
-    /**
-     * Permite que los componentes (botones) dentro de un contenedor se naveguen
-     * con las cuatro teclas direccionales (Arriba, Abajo, Izquierda, Derecha)
-     * y que la tecla ENTER active el botón enfocado.
-     */
     public static void habilitarNavegacionFlechas(JComponent panel) {
-        // 1. Teclas para avanzar foco: Derecha y Abajo
         Set<AWTKeyStroke> teclasAdelante = new HashSet<>(
                 panel.getFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS));
         teclasAdelante.add(AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_RIGHT, 0));
         teclasAdelante.add(AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_DOWN, 0));
         panel.setFocusTraversalKeys(KeyboardFocusManager.FORWARD_TRAVERSAL_KEYS, teclasAdelante);
 
-        // 2. Teclas para retroceder foco: Izquierda y Arriba
         Set<AWTKeyStroke> teclasAtras = new HashSet<>(
                 panel.getFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS));
         teclasAtras.add(AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_LEFT, 0));
         teclasAtras.add(AWTKeyStroke.getAWTKeyStroke(KeyEvent.VK_UP, 0));
         panel.setFocusTraversalKeys(KeyboardFocusManager.BACKWARD_TRAVERSAL_KEYS, teclasAtras);
 
-        // 3. Activar botón con tecla ENTER cuando tiene el foco
         for (Component comp : panel.getComponents()) {
             if (comp instanceof JButton) {
                 JButton btn = (JButton) comp;
@@ -107,11 +89,6 @@ public class SeguridadUtil {
         }
     }
 
-    /**
-     * Permite recorrer secuencialmente una lista de componentes en orden vertical
-     * usando las flechas Arriba y Abajo, sin interferir con las flechas Izquierda/Derecha
-     * que mueven el cursor del texto.
-     */
     public static void configurarNavegacionVertical(Component... componentes) {
         for (int i = 0; i < componentes.length; i++) {
             final int index = i;
