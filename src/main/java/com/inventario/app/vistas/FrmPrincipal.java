@@ -1,4 +1,3 @@
-
 package com.inventario.app.vistas;
 
 import com.inventario.app.excepciones.CodigoDuplicadoException;
@@ -6,29 +5,62 @@ import com.inventario.app.excepciones.DatoInvalidoException;
 import com.inventario.app.excepciones.ProductoNoEncontradoException;
 import com.inventario.app.excepciones.StockInsuficienteException;
 import com.inventario.app.modelos.Producto;
+import com.inventario.app.modelos.Usuario;
 import com.inventario.app.servicio.InventarioService;
+import com.inventario.app.utilidades.SeguridadUtil;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.util.List;
 
 public class FrmPrincipal extends JFrame {
 
     private final InventarioService servicio;
     private JTable tablaProductos;
+    // Botones de operaciones para control de privilegios
+    private JButton btnRegistrar;
+    private JButton btnModificar;
+    private JButton btnEliminar;
+    private JButton btnEntrada;
+    private JButton btnSalida;
     private DefaultTableModel modeloTabla;
     private JLabel lblValorTotal;
+    private JLabel lblEstadoUsuario;
     private JComboBox<String> cmbFiltroCategoria;
+    
+    // Almacena la sesión activa del usuario
+    private Usuario usuarioAutenticado;
 
     private static final String[] CATEGORIAS_VALIDAS = {
             "Electrónica", "Oficina", "Abarrotes", "Limpieza", "Herramientas"
     };
 
+    // 1. Constructor por defecto
     public FrmPrincipal() {
         this.servicio = new InventarioService();
         configurarVentana();
         cargarDatosTabla(servicio.listarProductos());
+    }
+
+    // 2. Constructor sobrecargado con sesión
+    public FrmPrincipal(Usuario usuario) {
+        this();
+        this.usuarioAutenticado = usuario;
+
+        if (usuario != null) {
+            setTitle("Sistema de Gestión de Inventario - Operador: " + usuario.getUsername());
+            lblEstadoUsuario.setText("Operador: " + usuario.getUsername() + " (" + usuario.getRol() + ")");
+            
+            // Aplica las restricciones y accesos según el rol del usuario logueado
+            aplicarPermisosPorRol();
+        }
+    }
+
+    public Usuario getUsuarioAutenticado() {
+        return this.usuarioAutenticado;
     }
 
     private void configurarVentana() {
@@ -38,7 +70,17 @@ public class FrmPrincipal extends JFrame {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
 
-        // 1. Barra Superior: Filtros, Búsqueda y Cierre de Sesión
+        // Vinculación de la tecla ESC para confirmar salida/cierre de sesión
+        this.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cerrarSesionConEsc");
+        this.getRootPane().getActionMap().put("cerrarSesionConEsc", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                cerrarSesion();
+            }
+        });
+
+        // 1. Barra Superior: Filtros, Búsqueda y Cierre de Sesión con Mnemónicos
         JPanel panelSuperior = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
         panelSuperior.setBorder(BorderFactory.createTitledBorder("Búsqueda y Filtros"));
 
@@ -51,23 +93,42 @@ public class FrmPrincipal extends JFrame {
         cmbFiltroCategoria.addActionListener(e -> filtrarPorCategoria());
         panelSuperior.add(cmbFiltroCategoria);
 
+        // ALT + B -> Buscar por Código
         JButton btnBuscar = new JButton("Buscar por Código");
+        btnBuscar.setMnemonic(KeyEvent.VK_B);
+        btnBuscar.setDisplayedMnemonicIndex(0);
+        btnBuscar.setToolTipText("Presione ALT + B para buscar");
         btnBuscar.addActionListener(e -> buscarProductoPorCodigo());
         panelSuperior.add(btnBuscar);
 
+        // ALT + A -> Alerta Stock Bajo
         JButton btnStockBajo = new JButton("Alerta Stock Bajo (<= 5)");
+        btnStockBajo.setMnemonic(KeyEvent.VK_A);
+        btnStockBajo.setDisplayedMnemonicIndex(0);
+        btnStockBajo.setToolTipText("Presione ALT + A para ver existencias bajas");
         btnStockBajo.addActionListener(e -> mostrarAlertaStockBajo());
         panelSuperior.add(btnStockBajo);
 
+        // ALT + F -> Refrescar catálogo
         JButton btnRefrescar = new JButton("Refrescar");
+        btnRefrescar.setMnemonic(KeyEvent.VK_F);
+        btnRefrescar.setDisplayedMnemonicIndex(2); // Subraya la letra 'f'
+        btnRefrescar.setToolTipText("Presione ALT + F para recargar la tabla");
         btnRefrescar.addActionListener(e -> refrescarCatalogo());
         panelSuperior.add(btnRefrescar);
 
+        // ALT + C -> Cerrar Sesión
         JButton btnCerrarSesion = new JButton("Cerrar Sesión");
         btnCerrarSesion.setBackground(new Color(220, 80, 80));
         btnCerrarSesion.setForeground(Color.WHITE);
+        btnCerrarSesion.setMnemonic(KeyEvent.VK_C);
+        btnCerrarSesion.setDisplayedMnemonicIndex(0);
+        btnCerrarSesion.setToolTipText("Presione ALT + C o ESC para cerrar sesión");
         btnCerrarSesion.addActionListener(e -> cerrarSesion());
         panelSuperior.add(btnCerrarSesion);
+
+        // Habilita navegación con flechas y activación con ENTER en la barra superior
+        SeguridadUtil.habilitarNavegacionFlechas(panelSuperior);
 
         add(panelSuperior, BorderLayout.NORTH);
 
@@ -76,7 +137,7 @@ public class FrmPrincipal extends JFrame {
         modeloTabla = new DefaultTableModel(columnas, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                return false; // Solo lectura en la tabla
+                return false;
             }
         };
 
@@ -86,38 +147,128 @@ public class FrmPrincipal extends JFrame {
         scrollTabla.setBorder(BorderFactory.createTitledBorder("Catálogo de Productos en MongoDB"));
         add(scrollTabla, BorderLayout.CENTER);
 
-        // 3. Barra Lateral Derecha: Acciones CRUD y Movimientos
+        // 3. Barra Lateral Derecha: Acciones CRUD y Movimientos con Mnemónicos
         JPanel panelAcciones = new JPanel(new GridLayout(6, 1, 8, 8));
         panelAcciones.setBorder(BorderFactory.createTitledBorder("Operaciones"));
 
-        JButton btnRegistrar = new JButton("Registrar Producto");
+        // ALT + R -> Registrar Producto
+        btnRegistrar = new JButton("Registrar Producto");
+        btnRegistrar.setMnemonic(KeyEvent.VK_R);
+        btnRegistrar.setDisplayedMnemonicIndex(0);
+        btnRegistrar.setToolTipText("Presione ALT + R para registrar");
         btnRegistrar.addActionListener(e -> registrarNuevoProducto());
         panelAcciones.add(btnRegistrar);
 
-        JButton btnModificar = new JButton("Modificar Producto");
+        // ALT + M -> Modificar Producto
+        btnModificar = new JButton("Modificar Producto");
+        btnModificar.setMnemonic(KeyEvent.VK_M);
+        btnModificar.setDisplayedMnemonicIndex(0);
+        btnModificar.setToolTipText("Presione ALT + M para modificar el producto seleccionado");
         btnModificar.addActionListener(e -> modificarProductoSeleccionado());
         panelAcciones.add(btnModificar);
 
-        JButton btnEliminar = new JButton("Eliminar Producto");
+        // ALT + E -> Eliminar Producto
+        btnEliminar = new JButton("Eliminar Producto");
+        btnEliminar.setMnemonic(KeyEvent.VK_E);
+        btnEliminar.setDisplayedMnemonicIndex(0);
+        btnEliminar.setToolTipText("Presione ALT + E para eliminar el producto seleccionado");
         btnEliminar.addActionListener(e -> eliminarProductoSeleccionado());
         panelAcciones.add(btnEliminar);
 
-        JButton btnEntrada = new JButton("Entrada Stock (+)");
+        // ALT + N -> Entrada Stock (+)
+        btnEntrada = new JButton("Entrada Stock (+)");
+        btnEntrada.setMnemonic(KeyEvent.VK_N);
+        btnEntrada.setDisplayedMnemonicIndex(1); // Subraya la letra 'n' de Entrada
+        btnEntrada.setToolTipText("Presione ALT + N para ingresar stock");
         btnEntrada.addActionListener(e -> gestionarMovimiento(true));
         panelAcciones.add(btnEntrada);
 
-        JButton btnSalida = new JButton("Salida Stock (-)");
+        // ALT + S -> Salida Stock (-)
+        btnSalida = new JButton("Salida Stock (-)");
+        btnSalida.setMnemonic(KeyEvent.VK_S);
+        btnSalida.setDisplayedMnemonicIndex(0);
+        btnSalida.setToolTipText("Presione ALT + S para registrar salida de stock");
         btnSalida.addActionListener(e -> gestionarMovimiento(false));
         panelAcciones.add(btnSalida);
 
+        // Habilita navegación con flechas direccionales y activación con ENTER en el panel lateral
+        SeguridadUtil.habilitarNavegacionFlechas(panelAcciones);
+
         add(panelAcciones, BorderLayout.EAST);
 
-        // 4. Barra Inferior: Resumen Financiero
-        JPanel panelInferior = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 10));
+        // 4. Barra Inferior: Estado de Sesión y Resumen Financiero
+        JPanel panelInferior = new JPanel(new BorderLayout(15, 0));
+        panelInferior.setBorder(BorderFactory.createEmptyBorder(6, 15, 6, 15));
+
+        lblEstadoUsuario = new JLabel("Operador: Invitado / Local");
+        lblEstadoUsuario.setFont(new Font("SansSerif", Font.PLAIN, 12));
+        lblEstadoUsuario.setForeground(new Color(90, 90, 90));
+        panelInferior.add(lblEstadoUsuario, BorderLayout.WEST);
+
         lblValorTotal = new JLabel("Valor Total del Inventario: $0.00");
         lblValorTotal.setFont(new Font("SansSerif", Font.BOLD, 14));
-        panelInferior.add(lblValorTotal);
+        panelInferior.add(lblValorTotal, BorderLayout.EAST);
+
         add(panelInferior, BorderLayout.SOUTH);
+    }
+
+    // ==========================================
+    // MÉTODO APLICAR PERMISOS POR ROL
+    // ==========================================
+    
+    private void aplicarPermisosPorRol() {
+        if (usuarioAutenticado == null) {
+            return;
+        }
+
+        String rol = usuarioAutenticado.getRol().toUpperCase();
+
+        switch (rol) {
+            case "MASTER":
+            case "ADMIN":
+                // Tienen acceso total a todas las operaciones
+                btnRegistrar.setEnabled(true);
+                btnModificar.setEnabled(true);
+                btnEliminar.setEnabled(true);
+                btnEntrada.setEnabled(true);
+                btnSalida.setEnabled(true);
+                break;
+
+            case "OPERADOR":
+                // Solo registra movimientos de almacén; no altera catálogo ni elimina
+                btnRegistrar.setEnabled(false);
+                btnModificar.setEnabled(false);
+                btnEliminar.setEnabled(false);
+                btnEntrada.setEnabled(true);
+                btnSalida.setEnabled(true);
+
+                // Mensajes descriptivos al pasar el ratón (Tooltip)
+                btnRegistrar.setToolTipText("Requiere privilegios de Administrador");
+                btnModificar.setToolTipText("Requiere privilegios de Administrador");
+                btnEliminar.setToolTipText("Requiere privilegios de Administrador");
+                break;
+
+            case "CONSULTA":
+                // Modo solo lectura: bloquea todas las mutaciones
+                btnRegistrar.setEnabled(false);
+                btnModificar.setEnabled(false);
+                btnEliminar.setEnabled(false);
+                btnEntrada.setEnabled(false);
+                btnSalida.setEnabled(false);
+
+                btnEntrada.setToolTipText("Rol de solo lectura");
+                btnSalida.setToolTipText("Rol de solo lectura");
+                break;
+
+            default:
+                // Por seguridad, cualquier rol desconocido queda en solo lectura
+                btnRegistrar.setEnabled(false);
+                btnModificar.setEnabled(false);
+                btnEliminar.setEnabled(false);
+                btnEntrada.setEnabled(false);
+                btnSalida.setEnabled(false);
+                break;
+        }
     }
 
     // ==========================================
@@ -180,7 +331,6 @@ public class FrmPrincipal extends JFrame {
                 "Cantidad Inicial:", txtStock
         };
 
-        // Bucle para mantener la ventana abierta hasta que los datos sean válidos o el usuario cancele
         while (true) {
             int opcion = JOptionPane.showConfirmDialog(
                     this, 
@@ -190,13 +340,11 @@ public class FrmPrincipal extends JFrame {
                     JOptionPane.PLAIN_MESSAGE
             );
 
-            // Si presiona Cancelar o cierra con la 'X', salimos sin hacer nada
             if (opcion != JOptionPane.OK_OPTION) {
                 break;
             }
 
             try {
-                // Validación de campos numéricos
                 double precio;
                 int stock;
                 try {
@@ -211,7 +359,6 @@ public class FrmPrincipal extends JFrame {
                     throw new DatoInvalidoException("La cantidad inicial debe ser un número entero (ejemplo: 10).");
                 }
 
-                // Creación de la entidad (aquí se disparan las validaciones de negocio del constructor)
                 Producto nuevo = new Producto(
                         txtCodigo.getText(),
                         txtNombre.getText(),
@@ -221,14 +368,12 @@ public class FrmPrincipal extends JFrame {
                         stock
                 );
 
-                // Inserción en MongoDB
                 servicio.registrarProducto(nuevo);
                 JOptionPane.showMessageDialog(this, "Producto registrado exitosamente en MongoDB.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
                 refrescarCatalogo();
-                break; // Registro exitoso: salimos del bucle y se cierra el formulario
+                break;
 
             } catch (CodigoDuplicadoException | DatoInvalidoException e) {
-                // Mostramos el error; al no haber un break, el bucle repite y el formulario mantiene lo digitado
                 JOptionPane.showMessageDialog(this, e.getMessage(), "Error de Validación", JOptionPane.WARNING_MESSAGE);
             }
         }
@@ -269,7 +414,6 @@ public class FrmPrincipal extends JFrame {
                 }
 
                 try {
-                    // 1. Validación del precio numérico
                     double precio;
                     try {
                         precio = Double.parseDouble(txtPrecio.getText().trim());
@@ -281,26 +425,21 @@ public class FrmPrincipal extends JFrame {
                         throw new DatoInvalidoException("El precio debe ser un número mayor a 0.00.");
                     }
 
-                    // 2. Validación del nombre
                     String nom = txtNombre.getText().trim();
                     if (nom.isEmpty()) {
                         throw new DatoInvalidoException("El nombre del producto no puede quedar vacío.");
                     }
 
-                    // >>> AQUÍ VA TU CÓDIGO <<<
-                    // 3. Validación de la descripción
                     String desc = txtDescripcion.getText().trim();
                     if (desc.isEmpty()) {
                         throw new DatoInvalidoException("La descripción del producto no puede quedar vacía.");
                     }
 
-                    // Asignación de los valores validados
                     actual.setNombre(nom);
                     actual.setDescripcion(desc);
                     actual.setCategoria((String) cmbCat.getSelectedItem());
                     actual.setPrecio(precio);
 
-                    // Guardado en MongoDB
                     servicio.modificarProducto(actual);
                     JOptionPane.showMessageDialog(this, "Producto actualizado correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
                     refrescarCatalogo();
@@ -316,6 +455,17 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void eliminarProductoSeleccionado() {
+        // Doble validación de privilegios para la eliminación
+        if (usuarioAutenticado != null &&
+                !"MASTER".equalsIgnoreCase(usuarioAutenticado.getRol()) &&
+                !"ADMIN".equalsIgnoreCase(usuarioAutenticado.getRol())) {
+            JOptionPane.showMessageDialog(this, 
+                    "Acceso denegado: Su rol no tiene privilegios para eliminar productos.", 
+                    "Seguridad", 
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
         String codigo = obtenerCodigoSeleccionado();
         if (codigo == null) return;
 
@@ -395,7 +545,7 @@ public class FrmPrincipal extends JFrame {
                         "Se encontraron " + coincidencias.size() + " producto(s) coincidente(s).", 
                         "Resultado de Búsqueda", 
                         JOptionPane.INFORMATION_MESSAGE
-                );
+                        );
             }
         } catch (DatoInvalidoException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
@@ -403,7 +553,6 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void mostrarAlertaStockBajo() {
-        // 1. Conteo ultra rápido directo en MongoDB
         long totalCriticos = servicio.contarProductosBajos(5);
 
         if (totalCriticos == 0) {
@@ -416,16 +565,16 @@ public class FrmPrincipal extends JFrame {
             return;
         }
 
-        // 2. Traemos únicamente los primeros 50 registros para no saturar memoria
         List<Producto> bajos = servicio.obtenerExistenciasBajasPaginadas(5, 50);
 
-        // 3. Ventana emergente con JTable y Scroll
         JDialog dialogoAlerta = new JDialog(this, "Alerta: Productos con Stock Bajo", true);
         dialogoAlerta.setSize(600, 350);
         dialogoAlerta.setLocationRelativeTo(this);
         dialogoAlerta.setLayout(new BorderLayout(10, 10));
 
-        // Encabezado
+        // Vinculación de ESC para cerrar el diálogo de alerta
+        SeguridadUtil.vincularCierreConEsc(dialogoAlerta, dialogoAlerta.getRootPane());
+
         JLabel lblInfo = new JLabel(String.format(
                 "  Total de productos críticos: %d (Mostrando primeros %d)", 
                 totalCriticos, bajos.size()
@@ -434,7 +583,6 @@ public class FrmPrincipal extends JFrame {
         lblInfo.setForeground(new Color(180, 0, 0));
         dialogoAlerta.add(lblInfo, BorderLayout.NORTH);
 
-        // Tabla interna de stock bajo
         String[] columnas = {"Código", "Nombre", "Categoría", "Stock Actual"};
         DefaultTableModel modeloBajos = new DefaultTableModel(columnas, 0) {
             @Override
@@ -454,14 +602,20 @@ public class FrmPrincipal extends JFrame {
         JScrollPane scroll = new JScrollPane(tablaBajos);
         dialogoAlerta.add(scroll, BorderLayout.CENTER);
 
-        // Botón de cerrar
+        // ALT + E -> Entendido (subraya la 'E')
         JButton btnCerrar = new JButton("Entendido");
+        btnCerrar.setMnemonic(KeyEvent.VK_E);
+        btnCerrar.setDisplayedMnemonicIndex(0);
+        btnCerrar.setToolTipText("Presione ALT + E o ESC para cerrar");
         btnCerrar.addActionListener(e -> dialogoAlerta.dispose());
+
         JPanel panelBoton = new JPanel();
         panelBoton.add(btnCerrar);
         dialogoAlerta.add(panelBoton, BorderLayout.SOUTH);
 
-        // Mostramos el diálogo
+        // Habilita navegación con flechas en la botonera de la alerta
+        SeguridadUtil.habilitarNavegacionFlechas(panelBoton);
+
         dialogoAlerta.setVisible(true);
     }
 

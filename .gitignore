@@ -1,0 +1,7 @@
+target/
+dist/
+build/
+*.zip
+*.jar
+SistemaInventario/
+nbproject/private/
