@@ -39,8 +39,9 @@ public class Producto {
         if (categoria == null || categoria.trim().isEmpty() || categoria.equalsIgnoreCase("Seleccione una categoría")) {
             throw new DatoInvalidoException("Debe seleccionar una categoría válida.");
         }
-        if (precio <= 0) {
-            throw new DatoInvalidoException("El precio debe ser un número mayor a 0.00.");
+        if (!Double.isFinite(precio) || precio <= 0) {
+    throw new DatoInvalidoException(
+        "El precio debe ser un número válido mayor a 0.00.");
         }
         if (cantidad < 0) {
             throw new DatoInvalidoException("Las existencias no pueden ser negativas.");
@@ -84,16 +85,24 @@ public class Producto {
     }
 
     public void setPrecio(double precio) {
-        this.precio = precio;
+    if (!Double.isFinite(precio) || precio <= 0) {
+        throw new IllegalArgumentException("El precio debe ser un número válido mayor a cero.");
     }
+
+    this.precio = precio;
+}
 
     public int getCantidadDisponible() {
         return cantidadDisponible;
     }
 
     public void setCantidadDisponible(int cantidadDisponible) {
-        this.cantidadDisponible = cantidadDisponible;
+    if (cantidadDisponible < 0) {
+        throw new IllegalArgumentException("Las existencias no pueden ser negativas.");
     }
+
+    this.cantidadDisponible = cantidadDisponible;
+}
     
 @Override
     public String toString() {
