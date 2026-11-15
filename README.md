@@ -15,7 +15,16 @@ Este proyecto consiste en un sistema de escritorio desarrollado en Java para la 
    ```bash
    git clone https://github.com/ErickDelga/Sistema-de-Inventario2.0
 
-## Credenciales de Prueba
+2. **Ejecución de pruebas**
+
+Para verificar que la lógica y las conexiones funcionen correctamente, ejecuta las pruebas unitarias con Maven:
+
+* **Desde la terminal (en la raíz del proyecto):**
+
+   ```bash
+  mvn test
+
+Credenciales de Prueba
 - **Usuario:** `admin`
 - **Contraseña:** `123456`
 
@@ -32,4 +41,3 @@ Este proyecto consiste en un sistema de escritorio desarrollado en Java para la 
 - Josseline Marisol Bonilla Estrada
 - Alexandra Sorto
 - Oscar Alexander Cardoza Recinos
-
