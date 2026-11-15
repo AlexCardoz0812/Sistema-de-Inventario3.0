@@ -58,7 +58,8 @@ public class FrmPrincipal extends JFrame {
     private void configurarVentana() {
         setTitle("Sistema de Gestión de Inventario - Clave 2");
         setSize(950, 600);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // Al cerrar esta ventana de inventario, NO se cierra la app (el Login sigue abierto)
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); 
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
 
@@ -189,7 +190,7 @@ public class FrmPrincipal extends JFrame {
                 btnSalida.setEnabled(true);
                 break;
             case "OPERADOR":
-                btnRegistrar.setEnabled(false);
+                btnRegistrar.setEnabled(true);
                 btnModificar.setEnabled(false);
                 btnEliminar.setEnabled(false);
                 btnEntrada.setEnabled(true);
@@ -440,10 +441,20 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void cerrarSesion() {
-        int resp = JOptionPane.showConfirmDialog(this, "¿Desea cerrar la sesión?", "Confirmar Cierre", JOptionPane.YES_NO_OPTION);
+        int resp = JOptionPane.showConfirmDialog(this, "¿Desea cerrar la sesión actual?", "Confirmar Cierre de Sesión", JOptionPane.YES_NO_OPTION);
         if (resp == JOptionPane.YES_OPTION) {
-            new FrmLogin().setVisible(true);
+            // Solo cerramos esta ventana de inventario
             this.dispose();
+            
+            // Buscamos la ventana de Login que ya estaba abierta y la traemos al frente
+            for (java.awt.Window ventana : java.awt.Window.getWindows()) {
+                if (ventana instanceof FrmLogin) {
+                    ventana.setVisible(true);
+                    ventana.toFront();
+                    ventana.requestFocus();
+                    break;
+                }
+            }
         }
     }
 }

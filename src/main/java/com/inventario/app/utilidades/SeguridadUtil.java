@@ -21,13 +21,8 @@ import javax.swing.KeyStroke;
 public class SeguridadUtil {
 
     public static final String MASTER_DEFAULT_USER = "admin";
-    public static final String MASTER_DEFAULT_HASH = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9";
 
-    public static boolean esMasterDeEmergencia(String username, String passwordHash) {
-        return MASTER_DEFAULT_USER.equalsIgnoreCase(username != null ? username.trim() : "") 
-                && MASTER_DEFAULT_HASH.equalsIgnoreCase(passwordHash);
-    }
-
+    // Método único de encriptación
     public static String hashearPassword(String passwordPlana) {
         if (passwordPlana == null || passwordPlana.trim().isEmpty()) {
             return null;
@@ -49,6 +44,8 @@ public class SeguridadUtil {
         }
     }
 
+    // ... (Deja los métodos vincularCierreConEsc, habilitarNavegacionFlechas y configurarNavegacionVertical tal cual están)
+    
     public static void vincularCierreConEsc(Window ventana, JRootPane rootPane) {
         rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cerrarVentanaConEsc");
