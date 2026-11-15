@@ -58,7 +58,8 @@ public class FrmPrincipal extends JFrame {
     private void configurarVentana() {
         setTitle("Sistema de Gestión de Inventario - Clave 2");
         setSize(950, 600);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // DISPOSE_ON_CLOSE para no cerrar toda la app al cerrar esta ventana (el Login sigue abierto)
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
 
@@ -189,7 +190,9 @@ public class FrmPrincipal extends JFrame {
                 btnSalida.setEnabled(true);
                 break;
             case "OPERADOR":
-                btnRegistrar.setEnabled(false);
+                // El operador SÍ puede registrar productos
+                btnRegistrar.setEnabled(true);
+                // Pero NO puede modificar ni eliminar
                 btnModificar.setEnabled(false);
                 btnEliminar.setEnabled(false);
                 btnEntrada.setEnabled(true);
@@ -277,7 +280,7 @@ public class FrmPrincipal extends JFrame {
                 break;
             } catch (NumberFormatException e) {
                 JOptionPane.showMessageDialog(this, "Verifique los valores numéricos (precio y cantidad).", "Error", JOptionPane.WARNING_MESSAGE);
-            } catch (CodigoDuplicadoException | DatoInvalidoException e) {
+            } catch (CodigoDuplicadoException | DatoInvalidoException | IllegalArgumentException e) {
                 JOptionPane.showMessageDialog(this, e.getMessage(), "Error de Validación", JOptionPane.WARNING_MESSAGE);
             }
         }
@@ -325,11 +328,11 @@ public class FrmPrincipal extends JFrame {
                     break;
                 } catch (NumberFormatException e) {
                     JOptionPane.showMessageDialog(this, "El precio debe ser un número válido.", "Error", JOptionPane.WARNING_MESSAGE);
-                } catch (ProductoNoEncontradoException | DatoInvalidoException e) {
+                } catch (ProductoNoEncontradoException | DatoInvalidoException | IllegalArgumentException e) {
                     JOptionPane.showMessageDialog(this, e.getMessage(), "Error de Validación", JOptionPane.WARNING_MESSAGE);
                 }
             }
-        } catch (ProductoNoEncontradoException | DatoInvalidoException e) {
+        } catch (ProductoNoEncontradoException | DatoInvalidoException | IllegalArgumentException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
@@ -440,10 +443,20 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void cerrarSesion() {
-        int resp = JOptionPane.showConfirmDialog(this, "¿Desea cerrar la sesión?", "Confirmar Cierre", JOptionPane.YES_NO_OPTION);
+        int resp = JOptionPane.showConfirmDialog(this, "¿Desea cerrar la sesión actual?", "Confirmar Cierre de Sesión", JOptionPane.YES_NO_OPTION);
         if (resp == JOptionPane.YES_OPTION) {
-            new FrmLogin().setVisible(true);
+            // Solo cerramos esta ventana de inventario
             this.dispose();
+            
+            // Buscamos la ventana de Login que ya estaba abierta y la traemos al frente
+            for (java.awt.Window ventana : java.awt.Window.getWindows()) {
+                if (ventana instanceof FrmLogin) {
+                    ventana.setVisible(true);
+                    ventana.toFront();
+                    ventana.requestFocus();
+                    break;
+                }
+            }
         }
     }
 }
