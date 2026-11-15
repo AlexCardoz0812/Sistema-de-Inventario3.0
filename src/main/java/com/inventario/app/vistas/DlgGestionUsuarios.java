@@ -39,6 +39,8 @@ public class DlgGestionUsuarios extends JDialog {
     private JLabel lblRolActual;
     private JButton btnCrear, btnModificar, btnLimpiar, btnEliminar;
     private final UsuarioDAO usuarioDAO;
+    // Variable para guardar los usuarios en memoria y no saturar MongoDB
+    private List<Usuario> listaUsuariosEnMemoria;
 
     public DlgGestionUsuarios(JFrame padre) {
         super(padre, "Panel Master - Gestión y Asignación de Roles", true);
@@ -133,7 +135,10 @@ public class DlgGestionUsuarios extends JDialog {
 
     private void cargarListaUsuarios() {
         modeloLista.clear();
-        for (Usuario u : usuarioDAO.listarUsuarios()) {
+        // Hacemos la consulta UNA SOLA VEZ y la guardamos en memoria
+        listaUsuariosEnMemoria = usuarioDAO.listarUsuarios();
+        
+        for (Usuario u : listaUsuariosEnMemoria) {
             modeloLista.addElement(u.getUsername());
         }
     }
@@ -142,16 +147,20 @@ public class DlgGestionUsuarios extends JDialog {
         String seleccionado = listaUsuarios.getSelectedValue();
         if (seleccionado == null) return;
 
-        for (Usuario u : usuarioDAO.listarUsuarios()) {
+        // Recorremos la lista que ya tenemos en memoria (¡Cero consultas a MongoDB aquí!)
+        for (Usuario u : listaUsuariosEnMemoria) {
             if (u.getUsername().equals(seleccionado)) {
                 txtUsername.setText(u.getUsername());
                 txtUsername.setEditable(false);
                 txtPassword.setText("");
                 cmbRoles.setSelectedItem(u.getRol());
+
                 lblRolActual.setText("Modificando: " + u.getUsername() + " (Rol actual: " + u.getRol() + ")");
                 lblRolActual.setForeground(new Color(180, 80, 0));
+
                 btnCrear.setEnabled(false);
                 btnModificar.setEnabled(true);
+                // Protege la cuenta maestra principal de ser eliminada
                 btnEliminar.setEnabled(!SeguridadUtil.MASTER_DEFAULT_USER.equalsIgnoreCase(u.getUsername()));
                 break;
             }

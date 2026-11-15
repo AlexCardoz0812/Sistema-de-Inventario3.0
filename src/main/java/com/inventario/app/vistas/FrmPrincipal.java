@@ -58,8 +58,8 @@ public class FrmPrincipal extends JFrame {
     private void configurarVentana() {
         setTitle("Sistema de Gestión de Inventario - Clave 2");
         setSize(950, 600);
-        // DISPOSE_ON_CLOSE para no cerrar toda la app al cerrar esta ventana (el Login sigue abierto)
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        // DISPOSE_ON_CLOSE: Al cerrar esta ventana, NO se cierra la app (el Login sigue abierto)
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); 
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
 

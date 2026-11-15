@@ -38,7 +38,8 @@ public class FrmLogin extends javax.swing.JFrame {
     private void configurarVentana() {
         setTitle("Iniciar Sesión - Sistema de Inventario");
         setSize(360, 290);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        // El Login es la ventana principal, si se cierra, se cierra la app.
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); 
         setLayout(new GridLayout(4, 1, 10, 10));
         getRootPane().setBorder(BorderFactory.createEmptyBorder(20, 40, 20, 40));
 
@@ -63,19 +64,15 @@ public class FrmLogin extends javax.swing.JFrame {
         btnRegistrarse = new JButton("Registrarse (Consulta)");
         btnRegistrarse.setMnemonic(KeyEvent.VK_R);
         btnRegistrarse.setDisplayedMnemonicIndex(0);
-        btnRegistrarse.setToolTipText("Presione ALT + R para crear una cuenta con rol de Consulta");
+        btnRegistrarse.setToolTipText("Presione ALT + R para crear una cuenta");
         add(btnRegistrarse);
 
         btnIngresar.addActionListener(e -> intentarLogin());
-        btnRegistrarse.addActionListener(e -> abrirRegistroConsulta());
+        btnRegistrarse.addActionListener(e -> abrirVentanaRegistroDirecto());
     }
 
-    private void abrirRegistroConsulta() {
-        abrirRegistroConsultaConUsuario("");
-    }
-
-    private void abrirRegistroConsultaConUsuario(String usuarioSugerido) {
-        DlgRegistroConsulta dlg = new DlgRegistroConsulta(this, usuarioSugerido);
+    private void abrirVentanaRegistroDirecto() {
+        DlgRegistroConsulta dlg = new DlgRegistroConsulta(this, "");
         dlg.setVisible(true);
         if (dlg.getUsuarioCreado() != null) {
             txtUsuario.setText(dlg.getUsuarioCreado());
@@ -97,50 +94,46 @@ public class FrmLogin extends javax.swing.JFrame {
         Arrays.fill(passwordChars, '0');
         String passwordHasheada = SeguridadUtil.hashearPassword(passwordPlana);
 
-        if (SeguridadUtil.esMasterDeEmergencia(usuario, passwordHasheada)) {
-            Usuario masterOffline = new Usuario(usuario, passwordHasheada, "MASTER");
-            try {
-                UsuarioDAO dao = new UsuarioDAO();
-                Usuario userEnBd = dao.validarLogin(usuario, passwordHasheada);
-                if (userEnBd != null) {
-                    mostrarDialogoOpcionesMaster(userEnBd);
-                    return;
-                }
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this,
-                    "Iniciando sesión como MASTER en modo local (fuera de línea).\n" +
-                    "No se detectó un servicio activo de MongoDB en este equipo.",
-                    "Modo Autónomo / Sin Conexión",
-                    JOptionPane.INFORMATION_MESSAGE);
-            }
-            mostrarDialogoOpcionesMaster(masterOffline);
-            return;
-        }
-
         try {
             UsuarioDAO dao = new UsuarioDAO();
             Usuario userLogueado = dao.validarLogin(usuario, passwordHasheada);
 
             if (userLogueado != null) {
+                // Limpiamos los campos del login para el próximo usuario
+                txtUsuario.setText("");
+                txtPassword.setText("");
+
                 if ("MASTER".equalsIgnoreCase(userLogueado.getRol())) {
                     mostrarDialogoOpcionesMaster(userLogueado);
-                    return;
+                    return; // Retornamos para que no se abra el inventario por defecto
                 }
+
+                // Abrimos el inventario
                 FrmPrincipal principal = new FrmPrincipal(userLogueado);
                 principal.setVisible(true);
-                this.dispose();
+                
+                // NO HACEMOS NADA CON EL LOGIN, SE QUEDA ABIERTO (Visible)
+                
             } else {
                 if (dao.existeUsuario(usuario)) {
-                    JOptionPane.showMessageDialog(this, "Contraseña incorrecta para el usuario '" + usuario + "'.", "Error de autenticación", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "Contraseña incorrecta.", "Error", JOptionPane.ERROR_MESSAGE);
                     txtPassword.setText("");
                     txtPassword.requestFocus();
                 } else {
-                    JOptionPane.showMessageDialog(this, "El usuario '" + usuario + "' no está registrado.\nSe abrirá el formulario de registro con rol Consulta.", "Usuario no encontrado", JOptionPane.INFORMATION_MESSAGE);
-                    abrirRegistroConsultaConUsuario(usuario);
+                    JOptionPane.showMessageDialog(this, "El usuario '" + usuario + "' no está registrado. Se abrirá el registro.", "Usuario no encontrado", JOptionPane.INFORMATION_MESSAGE);
+
+                    DlgRegistroConsulta dlg = new DlgRegistroConsulta(this, usuario);
+                    dlg.setVisible(true);
+
+                    if (dlg.getUsuarioCreado() != null) {
+                        txtUsuario.setText(dlg.getUsuarioCreado());
+                        txtPassword.setText("");
+                        txtPassword.requestFocus();
+                    }
                 }
             }
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "No se pudo conectar a MongoDB. Solo el usuario de emergencia 'admin' puede ingresar sin base de datos activa.\nError: " + ex.getMessage(), "Error de Base de Datos", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Error de conexión a MongoDB.\n" + ex.getMessage(), "Error de BD", JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -164,7 +157,7 @@ public class FrmLogin extends javax.swing.JFrame {
             dlgMaster.dispose();
             FrmPrincipal principal = new FrmPrincipal(userLogueado);
             principal.setVisible(true);
-            this.dispose();
+            // El Login sigue visible
         });
 
         JButton btnUsuarios = new JButton("Gestionar Usuarios y Roles");
@@ -199,17 +192,5 @@ public class FrmLogin extends javax.swing.JFrame {
             }
         });
         dlgMaster.setVisible(true);
-    }
-
-    public static void main(String[] args) {
-        try {
-            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
-        } catch (Exception ignored) {}
-        java.awt.EventQueue.invokeLater(() -> { new FrmLogin().setVisible(true); });
     }
 }

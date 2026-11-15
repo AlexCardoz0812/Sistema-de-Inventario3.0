@@ -31,13 +31,13 @@ public class ConexionMongoDB {
                 
                 mongoClient = MongoClients.create(uri);
                 database = mongoClient.getDatabase(dbName);
-                System.out.println("Conexión exitosa a MongoDB");
+                System.out.println("✅ Conexión exitosa a MongoDB");
                 
-                //Crear usuario por defecto si no existe
+                // Crear usuario por defecto si no existe
                 crearUsuarioPorDefecto();
                 
             } catch (Exception e) {
-                System.err.println("Error al conectar a MongoDB: " + e.getMessage());
+                System.err.println("❌ Error al conectar a MongoDB: " + e.getMessage());
             }
         }
         return database;
@@ -52,7 +52,7 @@ public class ConexionMongoDB {
                         .append("passwordHash", "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92")
                         .append("rol", "MASTER");
                 usuarios.insertOne(admin);
-                System.out.println("Usuario 'admin' creado automáticamente (Contraseña: 123456).");
+                System.out.println("🌟 Usuario 'admin' creado automáticamente (Contraseña: 123456).");
             }
         } catch (Exception e) {
             System.err.println("Error al crear usuario por defecto: " + e.getMessage());

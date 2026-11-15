@@ -27,10 +27,7 @@ public class DlgRegistroConsulta extends JDialog {
     private JButton btnCancelar;
     private String usuarioCreado = null;
 
-    public DlgRegistroConsulta(Frame parent) {
-        this(parent, "");
-    }
-
+    // Único constructor (se eliminó el que no recibía parámetros)
     public DlgRegistroConsulta(Frame parent, String usuarioInicial) {
         super(parent, "Registro de Usuario - Consulta", true);
         configurarVentana();
