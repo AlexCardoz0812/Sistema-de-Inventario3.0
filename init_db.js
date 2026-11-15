@@ -88,7 +88,7 @@ db.productos.insertMany([
     }
 ]);
 
-print("✅ ¡Base de datos 'inventario_db' inicializada correctamente!");
-print("🔑 CREDENCIALES DE PRUEBA:");
-print("   -> MASTER (Acceso total): admin / 123456");
-print("   -> OPERADOR (Solo stock): operador1 / 123456");
+print("¡Base de datos 'inventario_db' inicializada correctamente!");
+print("CREDENCIALES DE PRUEBA:");
+print(" -> MASTER (Acceso total): admin / 123456");
+print(" -> OPERADOR (Solo stock): operador1 / 123456");
