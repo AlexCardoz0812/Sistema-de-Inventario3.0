@@ -29,7 +29,8 @@ git clone https://github.com/ErickDelga/Sistema-de-Inventario2.0
 En NetBeans, haz clic derecho sobre el archivo Sistema_de_inventario.java (ubicado en com.inventario.app) y selecciona Run File 
 (o presiona Shift + F6).
 
-Nota: La primera vez que se ejecute, la aplicación creará automáticamente el usuario administrador (MASTER) en la base de datos.
+Nota: "La primera vez que se ejecute la aplicación, se inicializará la base de datos con los usuarios de 
+prueba y un catálogo de 6 productos de ejemplo."
 
 ## Credenciales de Prueba
 
@@ -41,7 +42,10 @@ El sistema cuenta con un mecanismo de seguridad basado en roles. Para la primera
 | **OPERADOR** | `operador1` | `123456` | Puede registrar productos y mover stock, pero no eliminarlos. |
 | **CONSULTA** | *(Crea uno desde el Login)* | *(La que elijas)* | Solo lectura. No puede modificar nada. |
 
-*(Nota: El usuario `admin` se crea automáticamente al iniciar la app si la base de datos está vacía, o puedes ejecutar el script `init_db.js` manualmente en MongoDB para cargar los datos de prueba).*
+*Nota: Para probar el rol de CONSULTA, simplemente abre la aplicación y en la ventana de Login haz clic en el 
+botón "Registrarse (Consulta)". Llena el formulario con el nombre de usuario y contraseña que tú prefieras. 
+Al terminar, vuelve al Login e ingresa con esas credenciales; verás que el sistema te permite ver los productos, 
+pero bloquea los botones para modificarlos*
 
 ## Funcionalidades Implementadas
 
@@ -54,8 +58,18 @@ El sistema cuenta con un mecanismo de seguridad basado en roles. Para la primera
 - **Validaciones Robustas:** Verificación de precios válidos (mayores a 0, sin infinitos/NaN), cantidades no negativas, campos obligatorios y códigos duplicados.
 
 
+
+## Nota sobre el registro: 
+El botón "Registrarse" en el Login está diseñado únicamente para crear cuentas con el rol de CONSULTA (solo lectura). 
+Si un usuario necesita privilegios de OPERADOR o ADMIN/MASTER para modificar el inventario, 
+deberá ponerse en contacto con un administrador del sistema, quien podrá asignarle el rol correspondiente desde 
+el panel de gestión de usuarios
+
+
 ## Autores
 
 Erick Edgardo Delgado Palacios
+
 Alexandra Sorto
+
 Oscar Alexander Cardoza Recinos
