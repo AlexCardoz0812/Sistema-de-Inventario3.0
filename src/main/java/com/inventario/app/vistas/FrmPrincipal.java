@@ -23,6 +23,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.io.File;
+import java.net.URL;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -95,8 +96,23 @@ public class FrmPrincipal extends JFrame {
         return "MASTER".equalsIgnoreCase(rol) || "ADMIN".equalsIgnoreCase(rol);
     }
 
+    private void configurarIconoVentana() {
+        try {
+            URL urlIcono = getClass().getResource("/com/inventario/app/vistas/icono.png");
+            if (urlIcono == null) {
+                urlIcono = getClass().getResource("/icono.png");
+            }
+            if (urlIcono != null) {
+                Image icono = new ImageIcon(urlIcono).getImage();
+                setIconImage(icono);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     private void configurarVentana() {
         setUndecorated(true);
+        configurarIconoVentana();
         setTitle("Sistema de Gestión de Inventario");
         setSize(980, 640);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -175,7 +191,7 @@ public class FrmPrincipal extends JFrame {
         aplicarRenderizadorStockBajo();
 
         JScrollPane scrollTabla = new JScrollPane(tablaProductos);
-        scrollTabla.setBorder(BorderFactory.createTitledBorder("Catálogo de Productos en MongoDB (Resaltado rojo = Stock <= 5)"));
+        scrollTabla.setBorder(BorderFactory.createTitledBorder("Catálogo de Productos (Resaltado rojo = Stock <= 5)"));
         add(scrollTabla, BorderLayout.CENTER);
 
         JPanel panelAcciones = new JPanel(new GridLayout(8, 1, 8, 8));

@@ -46,7 +46,7 @@ public class FrmLogin extends JDialog {
     private JButton btnRegistrarse;
 
     public FrmLogin() {
-        super(crearFrameSoporte(), "Iniciar Sesión - Inventario", false);
+        super(crearFrameSoporte(), "Iniciar Sesión - Sistema de Gestión de Inventario", false);
         configurarVentana();
         this.setLocationRelativeTo(null);
         this.getRootPane().setDefaultButton(this.btnIngresar);
@@ -55,6 +55,7 @@ public class FrmLogin extends JDialog {
 
     private static JFrame crearFrameSoporte() {
         JFrame soporte = new JFrame("Sistema de Inventario");
+        SeguridadUtil.aplicarIcono(soporte);
         soporte.setUndecorated(true);
         soporte.setSize(0, 0);
         soporte.setLocationRelativeTo(null);
@@ -63,6 +64,7 @@ public class FrmLogin extends JDialog {
     }
 
     private void configurarVentana() {
+        SeguridadUtil.aplicarIcono(this);
         setSize(370, 315);
         setResizable(false);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
@@ -251,6 +253,7 @@ public class FrmLogin extends JDialog {
 
     private void mostrarDialogoOpcionesMaster(Usuario userLogueado) {
         JDialog dlgMaster = new JDialog(this, "Panel de Control Master", true);
+        SeguridadUtil.aplicarIcono(dlgMaster);
         dlgMaster.setSize(520, 160);
         dlgMaster.setLocationRelativeTo(this);
         dlgMaster.setLayout(new BorderLayout(10, 15));

@@ -2,17 +2,20 @@ package com.inventario.app.utilidades;
 
 import java.awt.AWTKeyStroke;
 import java.awt.Component;
+import java.awt.Image;
 import java.awt.KeyboardFocusManager;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
 import java.util.Set;
 import javax.swing.AbstractAction;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JRootPane;
@@ -21,6 +24,7 @@ import javax.swing.KeyStroke;
 public class SeguridadUtil {
 
     public static final String MASTER_DEFAULT_USER = "admin";
+    private static Image imagenIconoCache;
 
     // Método único de encriptación
     public static String hashearPassword(String passwordPlana) {
@@ -44,8 +48,33 @@ public class SeguridadUtil {
         }
     }
 
-    // ... (Deja los métodos vincularCierreConEsc, habilitarNavegacionFlechas y configurarNavegacionVertical tal cual están)
-    
+    public static Image obtenerIconoAplicacion() {
+        if (imagenIconoCache != null) {
+            return imagenIconoCache;
+        }
+        try {
+            URL url = SeguridadUtil.class.getResource("/com/inventario/app/vistas/icono.png");
+            if (url == null) {
+                url = SeguridadUtil.class.getResource("/icono.png");
+            }
+            if (url != null) {
+                imagenIconoCache = new ImageIcon(url).getImage();
+            }
+        } catch (Exception ignored) {
+        }
+        return imagenIconoCache;
+    }
+
+    public static void aplicarIcono(Window ventana) {
+        if (ventana == null) {
+            return;
+        }
+        Image icono = obtenerIconoAplicacion();
+        if (icono != null) {
+            ventana.setIconImage(icono);
+        }
+    }
+
     public static void vincularCierreConEsc(Window ventana, JRootPane rootPane) {
         rootPane.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cerrarVentanaConEsc");

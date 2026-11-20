@@ -10,31 +10,29 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 import java.util.List;
 
 public class DlgBusquedaProductos extends JDialog {
 
-    private final List<Producto> catalogoCompleto;
-    private JTextField txtTermino;
-    private JCheckBox chkCodigo;
-    private JCheckBox chkNombre;
-    private JCheckBox chkDescripcion;
-    private JCheckBox chkCategoria;
+    private final List<Producto> productosOriginales;
+    private JTextField txtFiltro;
     private JTable tablaResultados;
     private DefaultTableModel modeloTabla;
-    private JLabel lblContador;
-    private String codigoSeleccionado = null;
-    private Timer timerBusqueda;
+    private JButton btnSeleccionar;
+    private JButton btnCancelar;
+    private Timer timerDebounce;
+    private String codigoSeleccionado;
 
     public DlgBusquedaProductos(Frame owner, List<Producto> productos) {
-        super(owner, "Buscador Avanzado de Productos", true);
-        this.catalogoCompleto = productos;
+        super(owner, "Buscar Producto", true);
+        this.productosOriginales = productos != null ? productos : new ArrayList<>();
         configurarVentana();
-        ejecutarBusqueda();
-        SwingUtilities.invokeLater(() -> txtTermino.requestFocusInWindow());
+        cargarProductos(this.productosOriginales);
     }
 
     public String getCodigoSeleccionado() {
@@ -42,95 +40,40 @@ public class DlgBusquedaProductos extends JDialog {
     }
 
     private void configurarVentana() {
-        setSize(860, 480);
+        setSize(780, 460);
+        SeguridadUtil.aplicarIcono(this);
         setLocationRelativeTo(getOwner());
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
-        SeguridadUtil.vincularCierreConEsc(this, this.getRootPane());
 
-        // Atajo Ctrl+F para volver directo al cuadro de búsqueda
-        this.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "enfocarTextoBusqueda");
-        this.getRootPane().getActionMap().put("enfocarTextoBusqueda", new AbstractAction() {
+        SeguridadUtil.vincularCierreConEsc(this, getRootPane());
+
+        JPanel panelSuperior = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        panelSuperior.setBorder(BorderFactory.createTitledBorder("Búsqueda en Tiempo Real"));
+
+        JLabel lblBuscar = new JLabel("Código, Nombre o Categoría:");
+        lblBuscar.setDisplayedMnemonic(KeyEvent.VK_B);
+        lblBuscar.setDisplayedMnemonicIndex(0);
+        panelSuperior.add(lblBuscar);
+
+        txtFiltro = new JTextField(32);
+        txtFiltro.setToolTipText("Escribe para filtrar al instante (Ctrl+F para enfocar)");
+        lblBuscar.setLabelFor(txtFiltro);
+        panelSuperior.add(txtFiltro);
+
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "enfocarFiltro");
+        getRootPane().getActionMap().put("enfocarFiltro", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                txtTermino.requestFocusInWindow();
-                txtTermino.selectAll();
+                txtFiltro.requestFocusInWindow();
+                txtFiltro.selectAll();
             }
         });
 
-        timerBusqueda = new Timer(200, e -> ejecutarBusqueda());
-        timerBusqueda.setRepeats(false);
+        add(panelSuperior, BorderLayout.NORTH);
 
-        JPanel panelCriterios = new JPanel(new BorderLayout(8, 8));
-        panelCriterios.setBorder(BorderFactory.createTitledBorder("Criterios de Búsqueda"));
-
-        JPanel panelTexto = new JPanel(new BorderLayout(8, 0));
-        panelTexto.setBorder(BorderFactory.createEmptyBorder(4, 8, 0, 8));
-
-        JLabel lblBuscar = new JLabel("Texto a buscar:");
-        lblBuscar.setDisplayedMnemonic(KeyEvent.VK_T);
-        lblBuscar.setDisplayedMnemonicIndex(0);
-        panelTexto.add(lblBuscar, BorderLayout.WEST);
-
-        txtTermino = new JTextField();
-        txtTermino.setFont(new Font("SansSerif", Font.PLAIN, 14));
-        txtTermino.setToolTipText("Escriba para filtrar en tiempo real (Alt+T o Ctrl+F)");
-        lblBuscar.setLabelFor(txtTermino);
-        txtTermino.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) { timerBusqueda.restart(); }
-            @Override
-            public void removeUpdate(DocumentEvent e) { timerBusqueda.restart(); }
-            @Override
-            public void changedUpdate(DocumentEvent e) { timerBusqueda.restart(); }
-        });
-        panelTexto.add(txtTermino, BorderLayout.CENTER);
-
-        JButton btnLimpiar = new JButton("Limpiar");
-        btnLimpiar.setMnemonic(KeyEvent.VK_L);
-        btnLimpiar.addActionListener(e -> {
-            txtTermino.setText("");
-            txtTermino.requestFocusInWindow();
-            ejecutarBusqueda();
-        });
-        panelTexto.add(btnLimpiar, BorderLayout.EAST);
-
-        panelCriterios.add(panelTexto, BorderLayout.NORTH);
-
-        JPanel panelChecks = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 4));
-        panelChecks.add(new JLabel("Buscar en:"));
-
-        chkCodigo = new JCheckBox("Código", true);
-        chkCodigo.setMnemonic(KeyEvent.VK_O);
-        chkCodigo.setDisplayedMnemonicIndex(1);
-
-        chkNombre = new JCheckBox("Nombre", true);
-        chkNombre.setMnemonic(KeyEvent.VK_N);
-        chkNombre.setDisplayedMnemonicIndex(0);
-
-        chkDescripcion = new JCheckBox("Descripción", false);
-        chkDescripcion.setMnemonic(KeyEvent.VK_D);
-        chkDescripcion.setDisplayedMnemonicIndex(0);
-
-        chkCategoria = new JCheckBox("Categoría", false);
-        chkCategoria.setMnemonic(KeyEvent.VK_G);
-        chkCategoria.setDisplayedMnemonicIndex(4);
-
-        chkCodigo.addActionListener(e -> ejecutarBusqueda());
-        chkNombre.addActionListener(e -> ejecutarBusqueda());
-        chkDescripcion.addActionListener(e -> ejecutarBusqueda());
-        chkCategoria.addActionListener(e -> ejecutarBusqueda());
-
-        panelChecks.add(chkCodigo);
-        panelChecks.add(chkNombre);
-        panelChecks.add(chkDescripcion);
-        panelChecks.add(chkCategoria);
-
-        panelCriterios.add(panelChecks, BorderLayout.SOUTH);
-        SeguridadUtil.habilitarNavegacionFlechas(panelCriterios);
-        add(panelCriterios, BorderLayout.NORTH);
-
-        String[] columnas = {"Código", "Nombre", "Descripción", "Categoría", "Precio ($)", "Existencias", "Total ($)"};
+        String[] columnas = {"Código", "Nombre", "Descripción", "Categoría", "Precio ($)", "Existencias"};
         modeloTabla = new DefaultTableModel(columnas, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -143,87 +86,112 @@ public class DlgBusquedaProductos extends JDialog {
         tablaResultados.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2) {
+                if (e.getClickCount() == 2 && tablaResultados.getSelectedRow() != -1) {
+                    confirmarSeleccion();
+                }
+            }
+        });
+        tablaResultados.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER && tablaResultados.getSelectedRow() != -1) {
+                    e.consume();
                     confirmarSeleccion();
                 }
             }
         });
 
-        JScrollPane scroll = new JScrollPane(tablaResultados);
-        scroll.setBorder(BorderFactory.createTitledBorder("Coincidencias Encontradas"));
-        add(scroll, BorderLayout.CENTER);
+        add(new JScrollPane(tablaResultados), BorderLayout.CENTER);
 
-        JPanel panelSur = new JPanel(new BorderLayout(10, 0));
-        panelSur.setBorder(BorderFactory.createEmptyBorder(4, 12, 8, 12));
+        JPanel panelSur = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
 
-        lblContador = new JLabel("Mostrando 0 producto(s)");
-        lblContador.setFont(new Font("SansSerif", Font.BOLD, 12));
-        panelSur.add(lblContador, BorderLayout.WEST);
-
-        JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        JButton btnSeleccionar = new JButton("Ubicar en Catálogo");
-        btnSeleccionar.setMnemonic(KeyEvent.VK_U);
+        btnSeleccionar = new JButton("Seleccionar");
+        btnSeleccionar.setMnemonic(KeyEvent.VK_S);
+        btnSeleccionar.setDisplayedMnemonicIndex(0);
         btnSeleccionar.addActionListener(e -> confirmarSeleccion());
-        panelBotones.add(btnSeleccionar);
+        panelSur.add(btnSeleccionar);
 
-        JButton btnCerrar = new JButton("Cerrar");
-        btnCerrar.setMnemonic(KeyEvent.VK_C);
-        btnCerrar.addActionListener(e -> dispose());
-        panelBotones.add(btnCerrar);
+        btnCancelar = new JButton("Cancelar");
+        btnCancelar.setMnemonic(KeyEvent.VK_C);
+        btnCancelar.setDisplayedMnemonicIndex(0);
+        btnCancelar.addActionListener(e -> dispose());
+        panelSur.add(btnCancelar);
 
-        SeguridadUtil.habilitarNavegacionFlechas(panelBotones);
-        panelSur.add(panelBotones, BorderLayout.EAST);
+        SeguridadUtil.habilitarNavegacionFlechas(panelSur);
         add(panelSur, BorderLayout.SOUTH);
+
+        timerDebounce = new Timer(220, e -> aplicarFiltro());
+        timerDebounce.setRepeats(false);
+
+        txtFiltro.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                timerDebounce.restart();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                timerDebounce.restart();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                timerDebounce.restart();
+            }
+        });
+
+        txtFiltro.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_DOWN && modeloTabla.getRowCount() > 0) {
+                    tablaResultados.requestFocusInWindow();
+                    tablaResultados.setRowSelectionInterval(0, 0);
+                } else if (e.getKeyCode() == KeyEvent.VK_ENTER && modeloTabla.getRowCount() > 0) {
+                    if (tablaResultados.getSelectedRow() == -1) {
+                        tablaResultados.setRowSelectionInterval(0, 0);
+                    }
+                    confirmarSeleccion();
+                }
+            }
+        });
     }
 
-    private void ejecutarBusqueda() {
-        String termino = txtTermino.getText().trim().toLowerCase();
-        boolean bCodigo = chkCodigo.isSelected();
-        boolean bNombre = chkNombre.isSelected();
-        boolean bDesc = chkDescripcion.isSelected();
-        boolean bCat = chkCategoria.isSelected();
-
-        modeloTabla.setRowCount(0);
-
-        if (!termino.isEmpty() && !bCodigo && !bNombre && !bDesc && !bCat) {
-            lblContador.setText("Seleccione al menos un criterio de búsqueda (Código, Nombre, Descripción o Categoría).");
+    private void aplicarFiltro() {
+        String consulta = txtFiltro.getText() == null ? "" : txtFiltro.getText().trim().toLowerCase();
+        if (consulta.isEmpty()) {
+            cargarProductos(productosOriginales);
             return;
         }
 
-        for (Producto p : catalogoCompleto) {
-            boolean coincide = false;
+        List<Producto> filtrados = new ArrayList<>();
+        for (Producto p : productosOriginales) {
+            String cod = p.getCodigo() != null ? p.getCodigo().toLowerCase() : "";
+            String nom = p.getNombre() != null ? p.getNombre().toLowerCase() : "";
+            String cat = p.getCategoria() != null ? p.getCategoria().toLowerCase() : "";
+            String desc = p.getDescripcion() != null ? p.getDescripcion().toLowerCase() : "";
 
-            if (termino.isEmpty()) {
-                coincide = true;
-            } else {
-                if (bCodigo && p.getCodigo() != null && p.getCodigo().toLowerCase().contains(termino)) {
-                    coincide = true;
-                }
-                if (!coincide && bNombre && p.getNombre() != null && p.getNombre().toLowerCase().contains(termino)) {
-                    coincide = true;
-                }
-                if (!coincide && bDesc && p.getDescripcion() != null && p.getDescripcion().toLowerCase().contains(termino)) {
-                    coincide = true;
-                }
-                if (!coincide && bCat && p.getCategoria() != null && p.getCategoria().toLowerCase().contains(termino)) {
-                    coincide = true;
-                }
-            }
-
-            if (coincide) {
-                modeloTabla.addRow(new Object[]{
-                        p.getCodigo(),
-                        p.getNombre(),
-                        p.getDescripcion(),
-                        p.getCategoria(),
-                        String.format("%.2f", p.getPrecio()),
-                        p.getCantidadDisponible(),
-                        String.format("%.2f", p.calcularValorTotal())
-                });
+            if (cod.contains(consulta) || nom.contains(consulta) || cat.contains(consulta) || desc.contains(consulta)) {
+                filtrados.add(p);
             }
         }
+        cargarProductos(filtrados);
+    }
 
-        lblContador.setText("Mostrando " + modeloTabla.getRowCount() + " de " + catalogoCompleto.size() + " producto(s)");
+    private void cargarProductos(List<Producto> lista) {
+        modeloTabla.setRowCount(0);
+        for (Producto p : lista) {
+            modeloTabla.addRow(new Object[]{
+                    p.getCodigo(),
+                    p.getNombre(),
+                    p.getDescripcion(),
+                    p.getCategoria(),
+                    String.format("%.2f", p.getPrecio()),
+                    p.getCantidadDisponible()
+            });
+        }
+        if (modeloTabla.getRowCount() > 0) {
+            tablaResultados.setRowSelectionInterval(0, 0);
+        }
     }
 
     private void confirmarSeleccion() {
@@ -232,7 +200,7 @@ public class DlgBusquedaProductos extends JDialog {
             JOptionPane.showMessageDialog(this, "Seleccione un producto de la lista.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        this.codigoSeleccionado = (String) modeloTabla.getValueAt(fila, 0);
+        this.codigoSeleccionado = String.valueOf(modeloTabla.getValueAt(fila, 0));
         dispose();
     }
 }

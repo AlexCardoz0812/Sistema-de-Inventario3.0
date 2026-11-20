@@ -1,10 +1,8 @@
 package com.inventario.app.vistas;
 
+import com.inventario.app.dao.MovimientoDAO;
 import com.inventario.app.modelos.Movimiento;
-import com.inventario.app.modelos.Usuario;
-import com.inventario.app.servicio.MovimientoServicio;
 import com.inventario.app.utilidades.SeguridadUtil;
-import com.inventario.app.utilidades.SesionUsuario;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -14,70 +12,54 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
+import java.lang.reflect.Method;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class DlgHistorialMovimientos extends JDialog {
 
-    private final MovimientoServicio movimientoServicio;
-    private List<Movimiento> listaCompleta;
-    private JTable tablaHistorial;
-    private DefaultTableModel modeloTabla;
-    private JComboBox<String> cmbTipo;
+    private final MovimientoDAO movimientoDAO;
+    private List<Movimiento> movimientosOriginales;
     private JTextField txtFiltro;
-    private JButton btnExportarCSV;
-    private Timer timerBusqueda;
+    private JTable tablaMovimientos;
+    private DefaultTableModel modeloTabla;
+    private Timer timerDebounce;
 
     public DlgHistorialMovimientos(Frame owner) {
-        super(owner, "Historial de Movimientos (Kardex y Auditoría)", true);
-        this.movimientoServicio = new MovimientoServicio();
-        this.listaCompleta = new ArrayList<>();
+        super(owner, "Historial de Movimientos (Kardex)", true);
+        this.movimientoDAO = new MovimientoDAO();
+        this.movimientosOriginales = new ArrayList<>();
         configurarVentana();
-        aplicarPermisosExportacion();
-        cargarDatos();
-        SwingUtilities.invokeLater(() -> txtFiltro.requestFocusInWindow());
-    }
-
-    private boolean esUsuarioPrivilegiado() {
-        String rol = null;
-        if (getOwner() instanceof FrmPrincipal) {
-            Usuario u = ((FrmPrincipal) getOwner()).getUsuarioAutenticado();
-            if (u != null) {
-                rol = u.getRol();
-            }
-        }
-        if (rol == null || rol.trim().isEmpty()) {
-            rol = SesionUsuario.getRolActual();
-        }
-        return "MASTER".equalsIgnoreCase(rol) || "ADMIN".equalsIgnoreCase(rol);
-    }
-
-    private void aplicarPermisosExportacion() {
-        boolean autorizado = esUsuarioPrivilegiado();
-        btnExportarCSV.setEnabled(autorizado);
-        if (!autorizado) {
-            btnExportarCSV.setToolTipText("Acceso restringido: Solo usuarios MASTER o ADMIN pueden exportar el Kardex");
-        } else {
-            btnExportarCSV.setToolTipText("Exportar movimientos filtrados a Excel (.csv)");
-        }
+        cargarMovimientos();
     }
 
     private void configurarVentana() {
-        setSize(980, 520);
+        setSize(900, 480);
+        SeguridadUtil.aplicarIcono(this);
         setLocationRelativeTo(getOwner());
+        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
-        SeguridadUtil.vincularCierreConEsc(this, this.getRootPane());
 
-        InputMap inputMap = this.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
-        ActionMap actionMap = this.getRootPane().getActionMap();
+        SeguridadUtil.vincularCierreConEsc(this, getRootPane());
 
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "enfocarBuscarKardex");
-        actionMap.put("enfocarBuscarKardex", new AbstractAction() {
+        JPanel panelSuperior = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        panelSuperior.setBorder(BorderFactory.createTitledBorder("Filtro de Movimientos"));
+
+        JLabel lblFiltro = new JLabel("Buscar (Código, Producto, Tipo, Motivo o Usuario):");
+        lblFiltro.setDisplayedMnemonic(KeyEvent.VK_B);
+        lblFiltro.setDisplayedMnemonicIndex(0);
+        panelSuperior.add(lblFiltro);
+
+        txtFiltro = new JTextField(34);
+        txtFiltro.setToolTipText("Filtra automáticamente mientras escribes (Ctrl+F)");
+        lblFiltro.setLabelFor(txtFiltro);
+        panelSuperior.add(txtFiltro);
+
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "enfocarFiltroKardex");
+        getRootPane().getActionMap().put("enfocarFiltroKardex", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 txtFiltro.requestFocusInWindow();
@@ -85,73 +67,9 @@ public class DlgHistorialMovimientos extends JDialog {
             }
         });
 
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_K, InputEvent.CTRL_DOWN_MASK), "enfocarTipoKardex");
-        actionMap.put("enfocarTipoKardex", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                cmbTipo.requestFocusInWindow();
-                cmbTipo.showPopup();
-            }
-        });
+        add(panelSuperior, BorderLayout.NORTH);
 
-        timerBusqueda = new Timer(250, e -> aplicarFiltros());
-        timerBusqueda.setRepeats(false);
-
-        JPanel panelFiltros = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
-        panelFiltros.setBorder(BorderFactory.createTitledBorder("Filtros de Auditoría (Búsqueda en Tiempo Real)"));
-
-        JLabel lblTipo = new JLabel("Tipo:");
-        lblTipo.setDisplayedMnemonic(KeyEvent.VK_T);
-        lblTipo.setDisplayedMnemonicIndex(0);
-        panelFiltros.add(lblTipo);
-
-        cmbTipo = new JComboBox<>(new String[]{
-                "TODOS", "SALDO_INICIAL", "ENTRADA", "SALIDA", "CREACION", "MODIFICACION", "ELIMINACION"
-        });
-        cmbTipo.setToolTipText("Filtrar por tipo de movimiento (Alt+T o Ctrl+K)");
-        cmbTipo.addActionListener(e -> aplicarFiltros());
-        lblTipo.setLabelFor(cmbTipo);
-        panelFiltros.add(cmbTipo);
-
-        JLabel lblBuscar = new JLabel("Buscar (Código / Producto / Usuario):");
-        lblBuscar.setDisplayedMnemonic(KeyEvent.VK_B);
-        lblBuscar.setDisplayedMnemonicIndex(0);
-        panelFiltros.add(lblBuscar);
-
-        txtFiltro = new JTextField(22);
-        txtFiltro.setToolTipText("Buscar en tiempo real (Alt+B o Ctrl+F)");
-        lblBuscar.setLabelFor(txtFiltro);
-        txtFiltro.getDocument().addDocumentListener(new DocumentListener() {
-            @Override
-            public void insertUpdate(DocumentEvent e) { timerBusqueda.restart(); }
-            @Override
-            public void removeUpdate(DocumentEvent e) { timerBusqueda.restart(); }
-            @Override
-            public void changedUpdate(DocumentEvent e) { timerBusqueda.restart(); }
-        });
-        panelFiltros.add(txtFiltro);
-
-        JButton btnLimpiar = new JButton("Limpiar");
-        btnLimpiar.setMnemonic(KeyEvent.VK_L);
-        btnLimpiar.addActionListener(e -> {
-            cmbTipo.setSelectedItem("TODOS");
-            txtFiltro.setText("");
-            txtFiltro.requestFocusInWindow();
-            aplicarFiltros();
-        });
-        panelFiltros.add(btnLimpiar);
-
-        JButton btnRefrescar = new JButton("Actualizar");
-        btnRefrescar.setMnemonic(KeyEvent.VK_A);
-        btnRefrescar.addActionListener(e -> cargarDatos());
-        panelFiltros.add(btnRefrescar);
-
-        add(panelFiltros, BorderLayout.NORTH);
-
-        String[] columnas = {
-                "Fecha y Hora", "Tipo", "Código", "Producto",
-                "Cant.", "Stock Ant.", "Stock Nuevo", "Usuario", "Motivo"
-        };
+        String[] columnas = {"Fecha", "Código", "Producto", "Tipo", "Cantidad", "Stock Ant.", "Stock Act.", "Usuario", "Motivo / Detalle"};
         modeloTabla = new DefaultTableModel(columnas, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -159,106 +77,104 @@ public class DlgHistorialMovimientos extends JDialog {
             }
         };
 
-        tablaHistorial = new JTable(modeloTabla);
-        tablaHistorial.getColumnModel().getColumn(0).setPreferredWidth(130);
-        tablaHistorial.getColumnModel().getColumn(1).setPreferredWidth(105);
-        tablaHistorial.getColumnModel().getColumn(2).setPreferredWidth(80);
-        tablaHistorial.getColumnModel().getColumn(3).setPreferredWidth(160);
-        tablaHistorial.getColumnModel().getColumn(4).setPreferredWidth(55);
-        tablaHistorial.getColumnModel().getColumn(5).setPreferredWidth(70);
-        tablaHistorial.getColumnModel().getColumn(6).setPreferredWidth(80);
-        tablaHistorial.getColumnModel().getColumn(7).setPreferredWidth(90);
-        tablaHistorial.getColumnModel().getColumn(8).setPreferredWidth(180);
-
-        add(new JScrollPane(tablaHistorial), BorderLayout.CENTER);
+        tablaMovimientos = new JTable(modeloTabla);
+        tablaMovimientos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        add(new JScrollPane(tablaMovimientos), BorderLayout.CENTER);
 
         JPanel panelSur = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
-
-        btnExportarCSV = new JButton("Exportar Kardex (.csv)");
-        btnExportarCSV.setMnemonic(KeyEvent.VK_E);
-        btnExportarCSV.addActionListener(e -> exportarACSV());
-        panelSur.add(btnExportarCSV);
-
         JButton btnCerrar = new JButton("Cerrar");
         btnCerrar.setMnemonic(KeyEvent.VK_C);
+        btnCerrar.setDisplayedMnemonicIndex(0);
         btnCerrar.addActionListener(e -> dispose());
         panelSur.add(btnCerrar);
 
         SeguridadUtil.habilitarNavegacionFlechas(panelSur);
         add(panelSur, BorderLayout.SOUTH);
+
+        timerDebounce = new Timer(220, e -> aplicarFiltro());
+        timerDebounce.setRepeats(false);
+
+        txtFiltro.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                timerDebounce.restart();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                timerDebounce.restart();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                timerDebounce.restart();
+            }
+        });
     }
 
-    private void cargarDatos() {
+    private void cargarMovimientos() {
         try {
-            listaCompleta = movimientoServicio.obtenerHistorialCompleto();
-            aplicarFiltros();
+            List<Movimiento> lista = movimientoDAO.listarTodos();
+            movimientosOriginales = lista != null ? lista : new ArrayList<>();
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error al cargar el historial: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            movimientosOriginales = new ArrayList<>();
+            JOptionPane.showMessageDialog(
+                    this,
+                    "No se pudo cargar el historial de movimientos:\n" + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE
+            );
         }
+        aplicarFiltro();
     }
 
-    private void aplicarFiltros() {
-        String tipoSel = (String) cmbTipo.getSelectedItem();
-        String texto = txtFiltro.getText().trim().toLowerCase();
-
+    private void aplicarFiltro() {
+        String consulta = txtFiltro.getText() == null ? "" : txtFiltro.getText().trim().toLowerCase();
         modeloTabla.setRowCount(0);
-        for (Movimiento m : listaCompleta) {
-            boolean coincideTipo = "TODOS".equals(tipoSel) || tipoSel.equalsIgnoreCase(m.getTipo());
-            boolean coincideTexto = texto.isEmpty()
-                    || (m.getCodigoProducto() != null && m.getCodigoProducto().toLowerCase().contains(texto))
-                    || (m.getNombreProducto() != null && m.getNombreProducto().toLowerCase().contains(texto))
-                    || (m.getUsuario() != null && m.getUsuario().toLowerCase().contains(texto));
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
 
-            if (coincideTipo && coincideTexto) {
+        for (Movimiento m : movimientosOriginales) {
+            Object rawFecha = invocarGetter(m, "getFecha");
+            String fechaTexto = "";
+            if (rawFecha instanceof Date) {
+                fechaTexto = sdf.format((Date) rawFecha);
+            } else if (rawFecha != null) {
+                fechaTexto = String.valueOf(rawFecha);
+            }
+
+            String codigo = valorTexto(invocarGetter(m, "getCodigoProducto", "getCodigo"));
+            String producto = valorTexto(invocarGetter(m, "getNombreProducto", "getNombre"));
+            String tipo = valorTexto(invocarGetter(m, "getTipo", "getTipoMovimiento"));
+            String cantidad = valorTexto(invocarGetter(m, "getCantidad"));
+            String stockAnt = valorTexto(invocarGetter(m, "getStockAnterior"));
+            String stockAct = valorTexto(invocarGetter(m, "getStockNuevo", "getStockActual", "getNuevoStock"));
+            String usuario = valorTexto(invocarGetter(m, "getUsuario"));
+            String motivo = valorTexto(invocarGetter(m, "getMotivo", "getDetalle"));
+
+            String combinado = (fechaTexto + " " + codigo + " " + producto + " " + tipo + " "
+                    + cantidad + " " + stockAnt + " " + stockAct + " " + usuario + " " + motivo).toLowerCase();
+
+            if (consulta.isEmpty() || combinado.contains(consulta)) {
                 modeloTabla.addRow(new Object[]{
-                        m.getFechaHora(),
-                        m.getTipo(),
-                        m.getCodigoProducto(),
-                        m.getNombreProducto(),
-                        m.getCantidad(),
-                        m.getStockAnterior(),
-                        m.getStockNuevo(),
-                        m.getUsuario(),
-                        m.getMotivo()
+                        fechaTexto, codigo, producto, tipo, cantidad, stockAnt, stockAct, usuario, motivo
                 });
             }
         }
     }
 
-    private void exportarACSV() {
-        if (!esUsuarioPrivilegiado()) {
-            JOptionPane.showMessageDialog(this, "Acceso denegado: Solo usuarios MASTER o ADMIN pueden exportar el Kardex.", "Seguridad", JOptionPane.WARNING_MESSAGE);
-            return;
+    private Object invocarGetter(Object obj, String... nombresMetodo) {
+        if (obj == null) return null;
+        for (String nombre : nombresMetodo) {
+            try {
+                Method metodo = obj.getClass().getMethod(nombre);
+                return metodo.invoke(obj);
+            } catch (Exception ignored) {
+            }
         }
-        if (modeloTabla.getRowCount() == 0) {
-            JOptionPane.showMessageDialog(this, "No hay registros visibles para exportar.", "Aviso", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Guardar Historial Kardex");
-        chooser.setSelectedFile(new File("Historial_Kardex.csv"));
+        return null;
+    }
 
-        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File archivo = chooser.getSelectedFile();
-            if (!archivo.getName().toLowerCase().endsWith(".csv")) {
-                archivo = new File(archivo.getAbsolutePath() + ".csv");
-            }
-            try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(archivo), StandardCharsets.UTF_8))) {
-                pw.write('\ufeff');
-                pw.println("Fecha y Hora;Tipo;Codigo;Producto;Cantidad;Stock Anterior;Stock Nuevo;Usuario;Motivo");
-                for (int i = 0; i < modeloTabla.getRowCount(); i++) {
-                    StringBuilder fila = new StringBuilder();
-                    for (int j = 0; j < modeloTabla.getColumnCount(); j++) {
-                        String val = String.valueOf(modeloTabla.getValueAt(i, j)).replace(";", ",");
-                        fila.append(val);
-                        if (j < modeloTabla.getColumnCount() - 1) fila.append(";");
-                    }
-                    pw.println(fila);
-                }
-                JOptionPane.showMessageDialog(this, "Reporte exportado en:\n" + archivo.getAbsolutePath(), "Exportación Exitosa", JOptionPane.INFORMATION_MESSAGE);
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Error al guardar el archivo: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            }
-        }
+    private String valorTexto(Object val) {
+        return val == null ? "" : String.valueOf(val);
     }
 }
