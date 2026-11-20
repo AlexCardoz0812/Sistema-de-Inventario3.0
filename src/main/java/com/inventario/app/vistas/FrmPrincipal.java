@@ -8,12 +8,15 @@ import com.inventario.app.modelos.Producto;
 import com.inventario.app.modelos.Usuario;
 import com.inventario.app.servicio.InventarioService;
 import com.inventario.app.utilidades.SeguridadUtil;
+import com.inventario.app.utilidades.SesionUsuario;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
 
 public class FrmPrincipal extends JFrame {
@@ -25,6 +28,7 @@ public class FrmPrincipal extends JFrame {
     private JButton btnEliminar;
     private JButton btnEntrada;
     private JButton btnSalida;
+    private JButton btnHistorial;
     private DefaultTableModel modeloTabla;
     private JLabel lblValorTotal;
     private JLabel lblEstadoUsuario;
@@ -37,6 +41,7 @@ public class FrmPrincipal extends JFrame {
 
     public FrmPrincipal() {
         this.servicio = new InventarioService();
+        this.servicio.sincronizarSaldoInicialSiVacio();
         configurarVentana();
         cargarDatosTabla(servicio.listarProductos());
     }
@@ -45,7 +50,7 @@ public class FrmPrincipal extends JFrame {
         this();
         this.usuarioAutenticado = usuario;
         if (usuario != null) {
-            setTitle("Sistema de Gestión de Inventario - Operador: " + usuario.getUsername());
+            setTitle("Sistema de Gestión de Inventario v2.0.0 - Operador: " + usuario.getUsername());
             lblEstadoUsuario.setText("Operador: " + usuario.getUsername() + " (" + usuario.getRol() + ")");
             aplicarPermisosPorRol();
         }
@@ -55,11 +60,23 @@ public class FrmPrincipal extends JFrame {
         return this.usuarioAutenticado;
     }
 
+    /**
+     * Garantiza que el registro de auditoría (Kardex) firme con el usuario
+     * dueño de esta ventana, incluso si hay múltiples sesiones abiertas.
+     */
+    private void sincronizarSesionActiva() {
+        if (this.usuarioAutenticado != null) {
+            SesionUsuario.iniciarSesion(
+                    this.usuarioAutenticado.getUsername(),
+                    this.usuarioAutenticado.getRol()
+            );
+        }
+    }
+
     private void configurarVentana() {
-        setTitle("Sistema de Gestión de Inventario - Clave 2");
-        setSize(950, 600);
-        // DISPOSE_ON_CLOSE: Al cerrar esta ventana, NO se cierra la app (el Login sigue abierto)
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); 
+        setTitle("Sistema de Gestión de Inventario v2.0.0");
+        setSize(980, 600);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
 
@@ -159,6 +176,12 @@ public class FrmPrincipal extends JFrame {
         btnSalida.addActionListener(e -> gestionarMovimiento(false));
         panelAcciones.add(btnSalida);
 
+        btnHistorial = new JButton("Historial (Kardex)");
+        btnHistorial.setMnemonic(KeyEvent.VK_H);
+        btnHistorial.setDisplayedMnemonicIndex(0);
+        btnHistorial.addActionListener(e -> abrirHistorialMovimientos());
+        panelAcciones.add(btnHistorial);
+
         SeguridadUtil.habilitarNavegacionFlechas(panelAcciones);
         add(panelAcciones, BorderLayout.EAST);
 
@@ -170,11 +193,44 @@ public class FrmPrincipal extends JFrame {
         lblEstadoUsuario.setForeground(new Color(90, 90, 90));
         panelInferior.add(lblEstadoUsuario, BorderLayout.WEST);
 
+        JLabel lblCopyright = new JLabel("v2.0.0 | © 2026 Alex Software. Todos los derechos reservados.", SwingConstants.CENTER);
+        lblCopyright.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        lblCopyright.setForeground(new Color(110, 110, 110));
+        lblCopyright.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        lblCopyright.setToolTipText("Haz clic para ver información de licencia y versión");
+        lblCopyright.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                mostrarAcercaDe();
+            }
+        });
+        panelInferior.add(lblCopyright, BorderLayout.CENTER);
+
         lblValorTotal = new JLabel("Valor Total del Inventario: $0.00");
         lblValorTotal.setFont(new Font("SansSerif", Font.BOLD, 14));
         panelInferior.add(lblValorTotal, BorderLayout.EAST);
 
         add(panelInferior, BorderLayout.SOUTH);
+    }
+
+    private void mostrarAcercaDe() {
+        String mensaje = "<html><body style='width: 330px; font-family: Segoe UI, sans-serif;'>"
+                + "<h2 style='margin-bottom: 4px;'>Sistema de Gestión de Inventario</h2>"
+                + "<p style='margin-top: 0; color: #555;'><b>Versión 2.0.0</b> (Edición Comercial)</p>"
+                + "<hr>"
+                + "<p><b>Copyright © 2026 Alex Software.</b><br>"
+                + "Todos los derechos reservados.</p>"
+                + "<p style='font-size: 11px; color: #666;'>Queda prohibida la reproducción, distribución o "
+                + "ingeniería inversa total o parcial sin autorización expresa del titular.</p>"
+                + "<p style='font-size: 11px;'>Motor de datos: MongoDB | Runtime: Java 17</p>"
+                + "</body></html>";
+
+        JOptionPane.showMessageDialog(
+                this,
+                mensaje,
+                "Acerca de Sistema de Inventario v2.0.0",
+                JOptionPane.INFORMATION_MESSAGE
+        );
     }
 
     private void aplicarPermisosPorRol() {
@@ -188,15 +244,15 @@ public class FrmPrincipal extends JFrame {
                 btnEliminar.setEnabled(true);
                 btnEntrada.setEnabled(true);
                 btnSalida.setEnabled(true);
+                btnHistorial.setEnabled(true);
                 break;
             case "OPERADOR":
-                // El operador SÍ puede registrar productos
                 btnRegistrar.setEnabled(true);
-                // Pero NO puede modificar ni eliminar
                 btnModificar.setEnabled(false);
                 btnEliminar.setEnabled(false);
                 btnEntrada.setEnabled(true);
                 btnSalida.setEnabled(true);
+                btnHistorial.setEnabled(true);
                 break;
             case "CONSULTA":
                 btnRegistrar.setEnabled(false);
@@ -204,6 +260,7 @@ public class FrmPrincipal extends JFrame {
                 btnEliminar.setEnabled(false);
                 btnEntrada.setEnabled(false);
                 btnSalida.setEnabled(false);
+                btnHistorial.setEnabled(true);
                 break;
             default:
                 btnRegistrar.setEnabled(false);
@@ -211,6 +268,7 @@ public class FrmPrincipal extends JFrame {
                 btnEliminar.setEnabled(false);
                 btnEntrada.setEnabled(false);
                 btnSalida.setEnabled(false);
+                btnHistorial.setEnabled(false);
                 break;
         }
     }
@@ -271,6 +329,7 @@ public class FrmPrincipal extends JFrame {
             int opcion = JOptionPane.showConfirmDialog(this, formulario, "Registrar Producto", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
             if (opcion != JOptionPane.OK_OPTION) break;
             try {
+                sincronizarSesionActiva();
                 double precio = Double.parseDouble(txtPrecio.getText().trim());
                 int stock = Integer.parseInt(txtStock.getText().trim());
                 Producto nuevo = new Producto(txtCodigo.getText(), txtNombre.getText(), txtDescripcion.getText(), (String) cmbCat.getSelectedItem(), precio, stock);
@@ -310,6 +369,7 @@ public class FrmPrincipal extends JFrame {
                 int opcion = JOptionPane.showConfirmDialog(this, formulario, "Modificar Producto", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
                 if (opcion != JOptionPane.OK_OPTION) break;
                 try {
+                    sincronizarSesionActiva();
                     double precio = Double.parseDouble(txtPrecio.getText().trim());
                     if (precio <= 0) throw new DatoInvalidoException("El precio debe ser un número mayor a 0.00.");
                     String nom = txtNombre.getText().trim();
@@ -347,6 +407,7 @@ public class FrmPrincipal extends JFrame {
         int confirmacion = JOptionPane.showConfirmDialog(this, "¿Está seguro de eliminar el producto con código " + codigo + "?", "Confirmar Eliminación", JOptionPane.YES_NO_OPTION);
         if (confirmacion == JOptionPane.YES_OPTION) {
             try {
+                sincronizarSesionActiva();
                 servicio.eliminarProducto(codigo);
                 JOptionPane.showMessageDialog(this, "Producto eliminado de MongoDB.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
                 refrescarCatalogo();
@@ -360,15 +421,27 @@ public class FrmPrincipal extends JFrame {
         String codigo = obtenerCodigoSeleccionado();
         if (codigo == null) return;
         String tipo = esEntrada ? "Entrada (+)" : "Salida (-)";
-        String input = JOptionPane.showInputDialog(this, "Ingrese la cantidad para la " + tipo + ":", tipo, JOptionPane.QUESTION_MESSAGE);
-        if (input == null || input.trim().isEmpty()) return;
+
+        JTextField txtCantidad = new JTextField();
+        JTextField txtMotivo = new JTextField();
+        Object[] formulario = {
+                "Cantidad para la " + tipo + ":", txtCantidad,
+                "Motivo / Referencia (opcional):", txtMotivo
+        };
+
+        int opcion = JOptionPane.showConfirmDialog(this, formulario, tipo, JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (opcion != JOptionPane.OK_OPTION || txtCantidad.getText().trim().isEmpty()) return;
+
         try {
-            int cantidad = Integer.parseInt(input.trim());
+            sincronizarSesionActiva();
+            int cantidad = Integer.parseInt(txtCantidad.getText().trim());
+            String motivo = txtMotivo.getText().trim();
+
             if (esEntrada) {
-                servicio.registrarEntrada(codigo, cantidad);
+                servicio.registrarEntrada(codigo, cantidad, motivo);
                 JOptionPane.showMessageDialog(this, "Entrada registrada correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
             } else {
-                servicio.registrarSalida(codigo, cantidad);
+                servicio.registrarSalida(codigo, cantidad, motivo);
                 JOptionPane.showMessageDialog(this, "Salida registrada correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
             }
             refrescarCatalogo();
@@ -379,6 +452,11 @@ public class FrmPrincipal extends JFrame {
         } catch (ProductoNoEncontradoException | DatoInvalidoException e) {
             JOptionPane.showMessageDialog(this, e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void abrirHistorialMovimientos() {
+        DlgHistorialMovimientos dlg = new DlgHistorialMovimientos(this);
+        dlg.setVisible(true);
     }
 
     private void filtrarPorCategoria() {
@@ -445,10 +523,7 @@ public class FrmPrincipal extends JFrame {
     private void cerrarSesion() {
         int resp = JOptionPane.showConfirmDialog(this, "¿Desea cerrar la sesión actual?", "Confirmar Cierre de Sesión", JOptionPane.YES_NO_OPTION);
         if (resp == JOptionPane.YES_OPTION) {
-            // Solo cerramos esta ventana de inventario
             this.dispose();
-            
-            // Buscamos la ventana de Login que ya estaba abierta y la traemos al frente
             for (java.awt.Window ventana : java.awt.Window.getWindows()) {
                 if (ventana instanceof FrmLogin) {
                     ventana.setVisible(true);

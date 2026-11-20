@@ -3,6 +3,7 @@ package com.inventario.app.vistas;
 import com.inventario.app.dao.UsuarioDAO;
 import com.inventario.app.modelos.Usuario;
 import com.inventario.app.utilidades.SeguridadUtil;
+import com.inventario.app.utilidades.SesionUsuario;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -36,8 +37,8 @@ public class FrmLogin extends javax.swing.JFrame {
     }
 
     private void configurarVentana() {
-        setTitle("Iniciar Sesión - Sistema de Inventario");
-        setSize(360, 290);
+        setTitle("Iniciar Sesión - Sistema de Inventario v2.0.0");
+        setSize(380, 290);
         // El Login es la ventana principal, si se cierra, se cierra la app.
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); 
         setLayout(new GridLayout(4, 1, 10, 10));
@@ -82,7 +83,7 @@ public class FrmLogin extends javax.swing.JFrame {
     }
 
     private void intentarLogin() {
-        String usuario = txtUsuario.getText().trim();
+        String usuario = txtUsuario.getText().trim().toLowerCase();
         char[] passwordChars = txtPassword.getPassword();
 
         if (usuario.isEmpty() || passwordChars.length == 0) {
@@ -99,6 +100,9 @@ public class FrmLogin extends javax.swing.JFrame {
             Usuario userLogueado = dao.validarLogin(usuario, passwordHasheada);
 
             if (userLogueado != null) {
+                // Registramos el usuario activo para la auditoría (Kardex)
+                SesionUsuario.iniciarSesion(userLogueado.getUsername(), userLogueado.getRol());
+
                 // Limpiamos los campos del login para el próximo usuario
                 txtUsuario.setText("");
                 txtPassword.setText("");
@@ -154,6 +158,7 @@ public class FrmLogin extends javax.swing.JFrame {
         btnInventario.setMnemonic(KeyEvent.VK_I);
         btnInventario.setDisplayedMnemonicIndex(0);
         btnInventario.addActionListener(e -> {
+            SesionUsuario.iniciarSesion(userLogueado.getUsername(), userLogueado.getRol());
             dlgMaster.dispose();
             FrmPrincipal principal = new FrmPrincipal(userLogueado);
             principal.setVisible(true);
