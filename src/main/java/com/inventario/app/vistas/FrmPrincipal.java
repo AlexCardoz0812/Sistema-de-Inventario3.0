@@ -17,6 +17,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
 import java.util.List;
 
 public class FrmPrincipal extends JFrame {
@@ -32,6 +33,7 @@ public class FrmPrincipal extends JFrame {
     private DefaultTableModel modeloTabla;
     private JLabel lblValorTotal;
     private JLabel lblEstadoUsuario;
+    private JLabel lblTituloBarra;
     private JComboBox<String> cmbFiltroCategoria;
     private Usuario usuarioAutenticado;
 
@@ -50,8 +52,13 @@ public class FrmPrincipal extends JFrame {
         this();
         this.usuarioAutenticado = usuario;
         if (usuario != null) {
-            setTitle("Sistema de Gestión de Inventario v2.0.0 - Operador: " + usuario.getUsername());
-            lblEstadoUsuario.setText("Operador: " + usuario.getUsername() + " (" + usuario.getRol() + ")");
+            String userMayus = usuario.getUsername().toUpperCase();
+            String titulo = "Sistema de Gestión de Inventario - Operador: " + userMayus;
+            setTitle(titulo);
+            if (lblTituloBarra != null) {
+                lblTituloBarra.setText("   " + titulo);
+            }
+            lblEstadoUsuario.setText("Operador: " + userMayus + " (" + usuario.getRol().toUpperCase() + ")");
             aplicarPermisosPorRol();
         }
     }
@@ -67,18 +74,20 @@ public class FrmPrincipal extends JFrame {
     private void sincronizarSesionActiva() {
         if (this.usuarioAutenticado != null) {
             SesionUsuario.iniciarSesion(
-                    this.usuarioAutenticado.getUsername(),
+                    this.usuarioAutenticado.getUsername().toUpperCase(),
                     this.usuarioAutenticado.getRol()
             );
         }
     }
 
     private void configurarVentana() {
-        setTitle("Sistema de Gestión de Inventario v2.0.0");
-        setSize(980, 600);
+        setUndecorated(true);
+        setTitle("Sistema de Gestión de Inventario");
+        setSize(980, 620);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
+        getRootPane().setBorder(BorderFactory.createLineBorder(new Color(200, 204, 210), 1));
 
         this.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cerrarSesionConEsc");
         this.getRootPane().getActionMap().put("cerrarSesionConEsc", new AbstractAction() {
@@ -127,7 +136,11 @@ public class FrmPrincipal extends JFrame {
         panelSuperior.add(btnCerrarSesion);
 
         SeguridadUtil.habilitarNavegacionFlechas(panelSuperior);
-        add(panelSuperior, BorderLayout.NORTH);
+
+        JPanel contenedorNorte = new JPanel(new BorderLayout(0, 6));
+        contenedorNorte.add(crearBarraTituloPersonalizada(), BorderLayout.NORTH);
+        contenedorNorte.add(panelSuperior, BorderLayout.CENTER);
+        add(contenedorNorte, BorderLayout.NORTH);
 
         String[] columnas = {"Código", "Nombre", "Descripción", "Categoría", "Precio ($)", "Existencias", "Total ($)"};
         modeloTabla = new DefaultTableModel(columnas, 0) {
@@ -188,7 +201,7 @@ public class FrmPrincipal extends JFrame {
         JPanel panelInferior = new JPanel(new BorderLayout(15, 0));
         panelInferior.setBorder(BorderFactory.createEmptyBorder(6, 15, 6, 15));
 
-        lblEstadoUsuario = new JLabel("Operador: Invitado / Local");
+        lblEstadoUsuario = new JLabel("Operador: INVITADO / LOCAL");
         lblEstadoUsuario.setFont(new Font("SansSerif", Font.PLAIN, 12));
         lblEstadoUsuario.setForeground(new Color(90, 90, 90));
         panelInferior.add(lblEstadoUsuario, BorderLayout.WEST);
@@ -211,6 +224,136 @@ public class FrmPrincipal extends JFrame {
         panelInferior.add(lblValorTotal, BorderLayout.EAST);
 
         add(panelInferior, BorderLayout.SOUTH);
+    }
+
+    private JPanel crearBarraTituloPersonalizada() {
+        Color fondoBarra = new Color(243, 244, 246);
+        JPanel barra = new JPanel(new BorderLayout());
+        barra.setBackground(fondoBarra);
+        barra.setPreferredSize(new Dimension(0, 34));
+        barra.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(220, 223, 228)));
+
+        lblTituloBarra = new JLabel("   Sistema de Gestión de Inventario");
+        lblTituloBarra.setForeground(new Color(31, 41, 55));
+        lblTituloBarra.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        barra.add(lblTituloBarra, BorderLayout.WEST);
+
+        JPanel panelBotones = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        panelBotones.setOpaque(false);
+
+        JButton btnMin = crearBotonControl("—", fondoBarra, new Color(224, 228, 234), new Color(31, 41, 55), new Color(17, 24, 39), "Minimizar");
+        btnMin.addActionListener(e -> setState(Frame.ICONIFIED));
+
+        JButton btnMax = crearBotonControl("☐", fondoBarra, new Color(224, 228, 234), new Color(31, 41, 55), new Color(17, 24, 39), "Maximizar / Restaurar");
+        btnMax.addActionListener(e -> {
+            if ((getExtendedState() & Frame.MAXIMIZED_BOTH) == Frame.MAXIMIZED_BOTH) {
+                setExtendedState(Frame.NORMAL);
+            } else {
+                Rectangle areaUtil = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+                setMaximizedBounds(areaUtil);
+                setExtendedState(Frame.MAXIMIZED_BOTH);
+            }
+        });
+
+        JButton btnCerrar = crearBotonControl("✕", fondoBarra, new Color(232, 17, 35), new Color(31, 41, 55), Color.WHITE, "Cerrar ventana");
+        btnCerrar.addActionListener(e -> dispose());
+
+        panelBotones.add(btnMin);
+        panelBotones.add(btnMax);
+        panelBotones.add(btnCerrar);
+        barra.add(panelBotones, BorderLayout.EAST);
+
+        final Point[] puntoInicial = {null};
+        barra.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                puntoInicial[0] = e.getPoint();
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    btnMax.doClick();
+                }
+            }
+        });
+        barra.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (puntoInicial[0] != null && (getExtendedState() & Frame.MAXIMIZED_BOTH) != Frame.MAXIMIZED_BOTH) {
+                    Point ubicacionActual = getLocation();
+                    setLocation(
+                            ubicacionActual.x + e.getX() - puntoInicial[0].x,
+                            ubicacionActual.y + e.getY() - puntoInicial[0].y
+                    );
+                }
+            }
+        });
+
+        return barra;
+    }
+
+    private JButton crearBotonControl(String simbolo, Color colorBase, Color colorHover, Color textoBase, Color textoHover, String tooltip) {
+        final float[] progreso = {0f};
+        final boolean[] encima = {false};
+
+        JButton btn = new JButton(simbolo) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                int r = (int) (colorBase.getRed() + (colorHover.getRed() - colorBase.getRed()) * progreso[0]);
+                int gr = (int) (colorBase.getGreen() + (colorHover.getGreen() - colorBase.getGreen()) * progreso[0]);
+                int b = (int) (colorBase.getBlue() + (colorHover.getBlue() - colorBase.getBlue()) * progreso[0]);
+
+                g2.setColor(new Color(r, gr, b));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+
+                super.paintComponent(g);
+            }
+        };
+
+        btn.setPreferredSize(new Dimension(46, 33));
+        btn.setForeground(textoBase);
+        btn.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        btn.setToolTipText(tooltip);
+        btn.setFocusPainted(false);
+        btn.setBorderPainted(false);
+        btn.setContentAreaFilled(false);
+        btn.setOpaque(false);
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        Timer animador = new Timer(15, e -> {
+            if (encima[0] && progreso[0] < 1f) {
+                progreso[0] = Math.min(1f, progreso[0] + 0.18f);
+                btn.setForeground(progreso[0] > 0.5f ? textoHover : textoBase);
+                btn.repaint();
+            } else if (!encima[0] && progreso[0] > 0f) {
+                progreso[0] = Math.max(0f, progreso[0] - 0.18f);
+                btn.setForeground(progreso[0] > 0.5f ? textoHover : textoBase);
+                btn.repaint();
+            } else {
+                ((Timer) e.getSource()).stop();
+            }
+        });
+
+        btn.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                encima[0] = true;
+                animador.start();
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                encima[0] = false;
+                animador.start();
+            }
+        });
+
+        return btn;
     }
 
     private void mostrarAcercaDe() {
