@@ -10,8 +10,18 @@ import com.inventario.app.modelos.Movimiento;
 import com.inventario.app.modelos.Producto;
 import com.inventario.app.utilidades.SesionUsuario;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class InventarioService {
 
@@ -249,5 +259,145 @@ public class InventarioService {
                 ));
             }
         }
+    }
+
+    // ==========================================
+    // PROCESO 5: IMPORTACIÓN Y EXPORTACIÓN CSV
+    // ==========================================
+
+    public static class ResultadoImportacion {
+        private int importados;
+        private int omitidos;
+        private final List<String> detallesErrores = new ArrayList<>();
+
+        public int getImportados() {
+            return importados;
+        }
+
+        public int getOmitidos() {
+            return omitidos;
+        }
+
+        public List<String> getDetallesErrores() {
+            return detallesErrores;
+        }
+    }
+
+    public void generarPlantillaCSV(File archivoDestino) throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(archivoDestino), StandardCharsets.UTF_8))) {
+            writer.write('\ufeff');
+            writer.write("Codigo;Nombre;Descripcion;Categoria;Precio;Existencias");
+            writer.newLine();
+            writer.write("PROD-001;Teclado Mecánico RGB;Teclado retroiluminado español;Electrónica;45.50;15");
+            writer.newLine();
+            writer.write("PROD-002;Resma Papel Carta;Paquete de 500 hojas bond;Oficina;5.25;40");
+            writer.newLine();
+        }
+    }
+
+    public int exportarCatalogoCSV(File archivoDestino) throws IOException {
+        List<Producto> productos = listarProductos();
+        try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(archivoDestino), StandardCharsets.UTF_8))) {
+            writer.write('\ufeff');
+            writer.write("Codigo;Nombre;Descripcion;Categoria;Precio;Existencias;ValorTotal");
+            writer.newLine();
+
+            for (Producto p : productos) {
+                String linea = String.format(Locale.US, "%s;%s;%s;%s;%.2f;%d;%.2f",
+                        limpiarCampoCSV(p.getCodigo()),
+                        limpiarCampoCSV(p.getNombre()),
+                        limpiarCampoCSV(p.getDescripcion()),
+                        limpiarCampoCSV(p.getCategoria()),
+                        p.getPrecio(),
+                        p.getCantidadDisponible(),
+                        p.calcularValorTotal());
+                writer.write(linea);
+                writer.newLine();
+            }
+        }
+        return productos.size();
+    }
+
+    private String limpiarCampoCSV(String valor) {
+        if (valor == null) return "";
+        return valor.replace(";", ",").replace("\n", " ").replace("\r", " ").trim();
+    }
+
+    public ResultadoImportacion importarDesdeCSV(File archivoOrigen) throws IOException, DatoInvalidoException {
+        if (archivoOrigen == null || !archivoOrigen.exists()) {
+            throw new DatoInvalidoException("El archivo CSV seleccionado no existe.");
+        }
+
+        ResultadoImportacion resultado = new ResultadoImportacion();
+
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(new FileInputStream(archivoOrigen), StandardCharsets.UTF_8))) {
+
+            String linea;
+            int numeroLinea = 0;
+
+            while ((linea = reader.readLine()) != null) {
+                numeroLinea++;
+                if (numeroLinea == 1 && linea.startsWith("\ufeff")) {
+                    linea = linea.substring(1);
+                }
+
+                String lineaLimpia = linea.trim();
+                if (lineaLimpia.isEmpty()) {
+                    continue;
+                }
+
+                if (numeroLinea == 1 && lineaLimpia.toLowerCase().startsWith("c")) {
+                    String primeraCol = lineaLimpia.split("[;,]")[0].trim().toLowerCase();
+                    if (primeraCol.equals("codigo") || primeraCol.equals("código")) {
+                        continue;
+                    }
+                }
+
+                String separador = lineaLimpia.contains(";") ? ";" : ",";
+                String[] partes = lineaLimpia.split(separador, -1);
+
+                if (partes.length < 6) {
+                    resultado.omitidos++;
+                    resultado.detallesErrores.add("Fila " + numeroLinea + ": Faltan columnas (se esperan 6: Codigo, Nombre, Descripcion, Categoria, Precio, Existencias).");
+                    continue;
+                }
+
+                try {
+                    String codigo = partes[0].trim();
+                    String nombre = partes[1].trim();
+                    String descripcion = partes[2].trim();
+                    String categoria = normalizarCategoria(partes[3].trim());
+                    double precio = Double.parseDouble(partes[4].trim().replace(",", "."));
+                    int stock = Integer.parseInt(partes[5].trim());
+
+                    Producto nuevo = new Producto(codigo, nombre, descripcion, categoria, precio, stock);
+                    registrarProducto(nuevo);
+                    resultado.importados++;
+
+                } catch (NumberFormatException e) {
+                    resultado.omitidos++;
+                    resultado.detallesErrores.add("Fila " + numeroLinea + ": Precio o existencias con formato numérico inválido.");
+                } catch (CodigoDuplicadoException | DatoInvalidoException | IllegalArgumentException e) {
+                    resultado.omitidos++;
+                    resultado.detallesErrores.add("Fila " + numeroLinea + " (" + partes[0].trim() + "): " + e.getMessage());
+                }
+            }
+        }
+
+        return resultado;
+    }
+
+    private String normalizarCategoria(String catEntrada) {
+        if (catEntrada == null || catEntrada.isEmpty()) return "Oficina";
+        String lower = catEntrada.toLowerCase();
+        if (lower.startsWith("elec")) return "Electrónica";
+        if (lower.startsWith("ofic")) return "Oficina";
+        if (lower.startsWith("abar")) return "Abarrotes";
+        if (lower.startsWith("limp")) return "Limpieza";
+        if (lower.startsWith("herr")) return "Herramientas";
+        return catEntrada;
     }
 }

@@ -1,12 +1,18 @@
 package com.inventario.app.vistas;
 
 import com.inventario.app.modelos.Movimiento;
+import com.inventario.app.modelos.Usuario;
 import com.inventario.app.servicio.MovimientoServicio;
 import com.inventario.app.utilidades.SeguridadUtil;
+import com.inventario.app.utilidades.SesionUsuario;
 
 import javax.swing.*;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,13 +30,41 @@ public class DlgHistorialMovimientos extends JDialog {
     private DefaultTableModel modeloTabla;
     private JComboBox<String> cmbTipo;
     private JTextField txtFiltro;
+    private JButton btnExportarCSV;
+    private Timer timerBusqueda;
 
     public DlgHistorialMovimientos(Frame owner) {
         super(owner, "Historial de Movimientos (Kardex y Auditoría)", true);
         this.movimientoServicio = new MovimientoServicio();
         this.listaCompleta = new ArrayList<>();
         configurarVentana();
+        aplicarPermisosExportacion();
         cargarDatos();
+        SwingUtilities.invokeLater(() -> txtFiltro.requestFocusInWindow());
+    }
+
+    private boolean esUsuarioPrivilegiado() {
+        String rol = null;
+        if (getOwner() instanceof FrmPrincipal) {
+            Usuario u = ((FrmPrincipal) getOwner()).getUsuarioAutenticado();
+            if (u != null) {
+                rol = u.getRol();
+            }
+        }
+        if (rol == null || rol.trim().isEmpty()) {
+            rol = SesionUsuario.getRolActual();
+        }
+        return "MASTER".equalsIgnoreCase(rol) || "ADMIN".equalsIgnoreCase(rol);
+    }
+
+    private void aplicarPermisosExportacion() {
+        boolean autorizado = esUsuarioPrivilegiado();
+        btnExportarCSV.setEnabled(autorizado);
+        if (!autorizado) {
+            btnExportarCSV.setToolTipText("Acceso restringido: Solo usuarios MASTER o ADMIN pueden exportar el Kardex");
+        } else {
+            btnExportarCSV.setToolTipText("Exportar movimientos filtrados a Excel (.csv)");
+        }
     }
 
     private void configurarVentana() {
@@ -39,40 +73,81 @@ public class DlgHistorialMovimientos extends JDialog {
         setLayout(new BorderLayout(10, 10));
         SeguridadUtil.vincularCierreConEsc(this, this.getRootPane());
 
-        // Panel superior de filtros
-        JPanel panelFiltros = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
-        panelFiltros.setBorder(BorderFactory.createTitledBorder("Filtros de Auditoría"));
+        InputMap inputMap = this.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = this.getRootPane().getActionMap();
 
-        panelFiltros.add(new JLabel("Tipo:"));
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "enfocarBuscarKardex");
+        actionMap.put("enfocarBuscarKardex", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                txtFiltro.requestFocusInWindow();
+                txtFiltro.selectAll();
+            }
+        });
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_K, InputEvent.CTRL_DOWN_MASK), "enfocarTipoKardex");
+        actionMap.put("enfocarTipoKardex", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                cmbTipo.requestFocusInWindow();
+                cmbTipo.showPopup();
+            }
+        });
+
+        timerBusqueda = new Timer(250, e -> aplicarFiltros());
+        timerBusqueda.setRepeats(false);
+
+        JPanel panelFiltros = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        panelFiltros.setBorder(BorderFactory.createTitledBorder("Filtros de Auditoría (Búsqueda en Tiempo Real)"));
+
+        JLabel lblTipo = new JLabel("Tipo:");
+        lblTipo.setDisplayedMnemonic(KeyEvent.VK_T);
+        lblTipo.setDisplayedMnemonicIndex(0);
+        panelFiltros.add(lblTipo);
+
         cmbTipo = new JComboBox<>(new String[]{
                 "TODOS", "SALDO_INICIAL", "ENTRADA", "SALIDA", "CREACION", "MODIFICACION", "ELIMINACION"
         });
+        cmbTipo.setToolTipText("Filtrar por tipo de movimiento (Alt+T o Ctrl+K)");
         cmbTipo.addActionListener(e -> aplicarFiltros());
+        lblTipo.setLabelFor(cmbTipo);
         panelFiltros.add(cmbTipo);
 
-        panelFiltros.add(new JLabel("Buscar (Código / Producto / Usuario):"));
-        txtFiltro = new JTextField(18);
-        txtFiltro.addActionListener(e -> aplicarFiltros());
+        JLabel lblBuscar = new JLabel("Buscar (Código / Producto / Usuario):");
+        lblBuscar.setDisplayedMnemonic(KeyEvent.VK_B);
+        lblBuscar.setDisplayedMnemonicIndex(0);
+        panelFiltros.add(lblBuscar);
+
+        txtFiltro = new JTextField(22);
+        txtFiltro.setToolTipText("Buscar en tiempo real (Alt+B o Ctrl+F)");
+        lblBuscar.setLabelFor(txtFiltro);
+        txtFiltro.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) { timerBusqueda.restart(); }
+            @Override
+            public void removeUpdate(DocumentEvent e) { timerBusqueda.restart(); }
+            @Override
+            public void changedUpdate(DocumentEvent e) { timerBusqueda.restart(); }
+        });
         panelFiltros.add(txtFiltro);
 
-        JButton btnFiltrar = new JButton("Filtrar");
-        btnFiltrar.setMnemonic(KeyEvent.VK_F);
-        btnFiltrar.addActionListener(e -> aplicarFiltros());
-        panelFiltros.add(btnFiltrar);
+        JButton btnLimpiar = new JButton("Limpiar");
+        btnLimpiar.setMnemonic(KeyEvent.VK_L);
+        btnLimpiar.addActionListener(e -> {
+            cmbTipo.setSelectedItem("TODOS");
+            txtFiltro.setText("");
+            txtFiltro.requestFocusInWindow();
+            aplicarFiltros();
+        });
+        panelFiltros.add(btnLimpiar);
 
         JButton btnRefrescar = new JButton("Actualizar");
         btnRefrescar.setMnemonic(KeyEvent.VK_A);
-        btnRefrescar.addActionListener(e -> {
-            cmbTipo.setSelectedItem("TODOS");
-            txtFiltro.setText("");
-            cargarDatos();
-        });
+        btnRefrescar.addActionListener(e -> cargarDatos());
         panelFiltros.add(btnRefrescar);
 
-        SeguridadUtil.habilitarNavegacionFlechas(panelFiltros);
         add(panelFiltros, BorderLayout.NORTH);
 
-        // Tabla central
         String[] columnas = {
                 "Fecha y Hora", "Tipo", "Código", "Producto",
                 "Cant.", "Stock Ant.", "Stock Nuevo", "Usuario", "Motivo"
@@ -97,10 +172,9 @@ public class DlgHistorialMovimientos extends JDialog {
 
         add(new JScrollPane(tablaHistorial), BorderLayout.CENTER);
 
-        // Panel inferior de botones
         JPanel panelSur = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
 
-        JButton btnExportarCSV = new JButton("Exportar a Excel (.csv)");
+        btnExportarCSV = new JButton("Exportar Kardex (.csv)");
         btnExportarCSV.setMnemonic(KeyEvent.VK_E);
         btnExportarCSV.addActionListener(e -> exportarACSV());
         panelSur.add(btnExportarCSV);
@@ -152,6 +226,10 @@ public class DlgHistorialMovimientos extends JDialog {
     }
 
     private void exportarACSV() {
+        if (!esUsuarioPrivilegiado()) {
+            JOptionPane.showMessageDialog(this, "Acceso denegado: Solo usuarios MASTER o ADMIN pueden exportar el Kardex.", "Seguridad", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
         if (modeloTabla.getRowCount() == 0) {
             JOptionPane.showMessageDialog(this, "No hay registros visibles para exportar.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
@@ -166,7 +244,6 @@ public class DlgHistorialMovimientos extends JDialog {
                 archivo = new File(archivo.getAbsolutePath() + ".csv");
             }
             try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(archivo), StandardCharsets.UTF_8))) {
-                // BOM UTF-8 para que Excel abra acentos y eñes correctamente
                 pw.write('\ufeff');
                 pw.println("Fecha y Hora;Tipo;Codigo;Producto;Cantidad;Stock Anterior;Stock Nuevo;Usuario;Motivo");
                 for (int i = 0; i < modeloTabla.getRowCount(); i++) {

@@ -7,17 +7,23 @@ import com.inventario.app.excepciones.StockInsuficienteException;
 import com.inventario.app.modelos.Producto;
 import com.inventario.app.modelos.Usuario;
 import com.inventario.app.servicio.InventarioService;
+import com.inventario.app.utilidades.LicenciaUtil;
 import com.inventario.app.utilidades.SeguridadUtil;
 import com.inventario.app.utilidades.SesionUsuario;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.io.File;
+import java.time.LocalDate;
 import java.util.List;
 
 public class FrmPrincipal extends JFrame {
@@ -30,12 +36,17 @@ public class FrmPrincipal extends JFrame {
     private JButton btnEntrada;
     private JButton btnSalida;
     private JButton btnHistorial;
+    private JButton btnImportarCSV;
+    private JButton btnExportarCSV;
     private DefaultTableModel modeloTabla;
     private JLabel lblValorTotal;
     private JLabel lblEstadoUsuario;
     private JLabel lblTituloBarra;
+    private JLabel lblCopyright;
     private JComboBox<String> cmbFiltroCategoria;
     private Usuario usuarioAutenticado;
+
+    private static final int LIMITE_STOCK_BAJO = 5;
 
     private static final String[] CATEGORIAS_VALIDAS = {
             "Electrónica", "Oficina", "Abarrotes", "Limpieza", "Herramientas"
@@ -53,24 +64,22 @@ public class FrmPrincipal extends JFrame {
         this.usuarioAutenticado = usuario;
         if (usuario != null) {
             String userMayus = usuario.getUsername().toUpperCase();
-            String titulo = "Sistema de Gestión de Inventario - Operador: " + userMayus;
+            String rolMayus = usuario.getRol().toUpperCase();
+            String titulo = "Sistema de Gestión de Inventario — " + rolMayus;
             setTitle(titulo);
             if (lblTituloBarra != null) {
                 lblTituloBarra.setText("   " + titulo);
             }
-            lblEstadoUsuario.setText("Operador: " + userMayus + " (" + usuario.getRol().toUpperCase() + ")");
+            lblEstadoUsuario.setText("Operador: " + userMayus);
             aplicarPermisosPorRol();
         }
+        SwingUtilities.invokeLater(this::verificarYMostrarAlertaStockBajoAutomatica);
     }
 
     public Usuario getUsuarioAutenticado() {
         return this.usuarioAutenticado;
     }
 
-    /**
-     * Garantiza que el registro de auditoría (Kardex) firme con el usuario
-     * dueño de esta ventana, incluso si hay múltiples sesiones abiertas.
-     */
     private void sincronizarSesionActiva() {
         if (this.usuarioAutenticado != null) {
             SesionUsuario.iniciarSesion(
@@ -80,62 +89,73 @@ public class FrmPrincipal extends JFrame {
         }
     }
 
+    private boolean esUsuarioPrivilegiado() {
+        if (usuarioAutenticado == null) return false;
+        String rol = usuarioAutenticado.getRol();
+        return "MASTER".equalsIgnoreCase(rol) || "ADMIN".equalsIgnoreCase(rol);
+    }
+
     private void configurarVentana() {
         setUndecorated(true);
         setTitle("Sistema de Gestión de Inventario");
-        setSize(980, 620);
+        setSize(980, 640);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout(10, 10));
         getRootPane().setBorder(BorderFactory.createLineBorder(new Color(200, 204, 210), 1));
 
-        this.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cerrarSesionConEsc");
-        this.getRootPane().getActionMap().put("cerrarSesionConEsc", new AbstractAction() {
+        InputMap inputMap = this.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap actionMap = this.getRootPane().getActionMap();
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "cerrarSesionConEsc");
+        actionMap.put("cerrarSesionConEsc", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 cerrarSesion();
             }
         });
 
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "abrirBuscadorAtajo");
+        actionMap.put("abrirBuscadorAtajo", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                buscarProductoPorCodigo();
+            }
+        });
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_K, InputEvent.CTRL_DOWN_MASK), "enfocarCategoriaAtajo");
+        actionMap.put("enfocarCategoriaAtajo", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                cmbFiltroCategoria.requestFocusInWindow();
+                cmbFiltroCategoria.showPopup();
+            }
+        });
+
         JPanel panelSuperior = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
         panelSuperior.setBorder(BorderFactory.createTitledBorder("Búsqueda y Filtros"));
 
-        panelSuperior.add(new JLabel("Categoría:"));
+        JLabel lblCategoria = new JLabel("Categoría:");
+        lblCategoria.setDisplayedMnemonic(KeyEvent.VK_C);
+        lblCategoria.setDisplayedMnemonicIndex(0);
+        panelSuperior.add(lblCategoria);
+
         cmbFiltroCategoria = new JComboBox<>();
         cmbFiltroCategoria.addItem("TODAS");
         for (String cat : CATEGORIAS_VALIDAS) {
             cmbFiltroCategoria.addItem(cat);
         }
+        cmbFiltroCategoria.setToolTipText("Filtrar por tipo de mercadería (Alt+C o Ctrl+K)");
         cmbFiltroCategoria.addActionListener(e -> filtrarPorCategoria());
+        lblCategoria.setLabelFor(cmbFiltroCategoria);
         panelSuperior.add(cmbFiltroCategoria);
 
-        JButton btnBuscar = new JButton("Buscar por Código");
+        JButton btnBuscar = new JButton("Buscar Producto");
         btnBuscar.setMnemonic(KeyEvent.VK_B);
         btnBuscar.setDisplayedMnemonicIndex(0);
+        btnBuscar.setToolTipText("Abrir buscador avanzado (Alt+B o Ctrl+F)");
         btnBuscar.addActionListener(e -> buscarProductoPorCodigo());
         panelSuperior.add(btnBuscar);
-
-        JButton btnStockBajo = new JButton("Alerta Stock Bajo (<= 5)");
-        btnStockBajo.setMnemonic(KeyEvent.VK_A);
-        btnStockBajo.setDisplayedMnemonicIndex(0);
-        btnStockBajo.addActionListener(e -> mostrarAlertaStockBajo());
-        panelSuperior.add(btnStockBajo);
-
-        JButton btnRefrescar = new JButton("Refrescar");
-        btnRefrescar.setMnemonic(KeyEvent.VK_F);
-        btnRefrescar.setDisplayedMnemonicIndex(2);
-        btnRefrescar.addActionListener(e -> refrescarCatalogo());
-        panelSuperior.add(btnRefrescar);
-
-        JButton btnCerrarSesion = new JButton("Cerrar Sesión");
-        btnCerrarSesion.setBackground(new Color(220, 80, 80));
-        btnCerrarSesion.setForeground(Color.WHITE);
-        btnCerrarSesion.setMnemonic(KeyEvent.VK_C);
-        btnCerrarSesion.setDisplayedMnemonicIndex(0);
-        btnCerrarSesion.addActionListener(e -> cerrarSesion());
-        panelSuperior.add(btnCerrarSesion);
-
-        SeguridadUtil.habilitarNavegacionFlechas(panelSuperior);
 
         JPanel contenedorNorte = new JPanel(new BorderLayout(0, 6));
         contenedorNorte.add(crearBarraTituloPersonalizada(), BorderLayout.NORTH);
@@ -152,11 +172,13 @@ public class FrmPrincipal extends JFrame {
 
         tablaProductos = new JTable(modeloTabla);
         tablaProductos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        aplicarRenderizadorStockBajo();
+
         JScrollPane scrollTabla = new JScrollPane(tablaProductos);
-        scrollTabla.setBorder(BorderFactory.createTitledBorder("Catálogo de Productos en MongoDB"));
+        scrollTabla.setBorder(BorderFactory.createTitledBorder("Catálogo de Productos en MongoDB (Resaltado rojo = Stock <= 5)"));
         add(scrollTabla, BorderLayout.CENTER);
 
-        JPanel panelAcciones = new JPanel(new GridLayout(6, 1, 8, 8));
+        JPanel panelAcciones = new JPanel(new GridLayout(8, 1, 8, 8));
         panelAcciones.setBorder(BorderFactory.createTitledBorder("Operaciones"));
 
         btnRegistrar = new JButton("Registrar Producto");
@@ -195,28 +217,41 @@ public class FrmPrincipal extends JFrame {
         btnHistorial.addActionListener(e -> abrirHistorialMovimientos());
         panelAcciones.add(btnHistorial);
 
+        btnImportarCSV = new JButton("Importar Inventario");
+        btnImportarCSV.setMnemonic(KeyEvent.VK_P);
+        btnImportarCSV.setDisplayedMnemonicIndex(2);
+        btnImportarCSV.setToolTipText("Importar inventario masivamente desde Excel/CSV o descargar plantilla (Solo Master/Admin)");
+        btnImportarCSV.addActionListener(e -> gestionarImportacionCSV());
+        panelAcciones.add(btnImportarCSV);
+
+        btnExportarCSV = new JButton("Exportar Inventario");
+        btnExportarCSV.setMnemonic(KeyEvent.VK_X);
+        btnExportarCSV.setDisplayedMnemonicIndex(1);
+        btnExportarCSV.setToolTipText("Exportar todo el inventario actual de productos a Excel/CSV (Solo Master/Admin)");
+        btnExportarCSV.addActionListener(e -> exportarCatalogoACSV());
+        panelAcciones.add(btnExportarCSV);
+
         SeguridadUtil.habilitarNavegacionFlechas(panelAcciones);
         add(panelAcciones, BorderLayout.EAST);
 
         JPanel panelInferior = new JPanel(new BorderLayout(15, 0));
         panelInferior.setBorder(BorderFactory.createEmptyBorder(6, 15, 6, 15));
 
-        lblEstadoUsuario = new JLabel("Operador: INVITADO / LOCAL");
+        lblEstadoUsuario = new JLabel("Operador: INVITADO");
         lblEstadoUsuario.setFont(new Font("SansSerif", Font.PLAIN, 12));
         lblEstadoUsuario.setForeground(new Color(90, 90, 90));
         panelInferior.add(lblEstadoUsuario, BorderLayout.WEST);
 
-        JLabel lblCopyright = new JLabel("v2.0.0 | © 2026 Alex Software. Todos los derechos reservados.", SwingConstants.CENTER);
+        lblCopyright = new JLabel("", SwingConstants.CENTER);
         lblCopyright.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        lblCopyright.setForeground(new Color(110, 110, 110));
         lblCopyright.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        lblCopyright.setToolTipText("Haz clic para ver información de licencia y versión");
         lblCopyright.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 mostrarAcercaDe();
             }
         });
+        actualizarTextoPieLicencia();
         panelInferior.add(lblCopyright, BorderLayout.CENTER);
 
         lblValorTotal = new JLabel("Valor Total del Inventario: $0.00");
@@ -224,6 +259,174 @@ public class FrmPrincipal extends JFrame {
         panelInferior.add(lblValorTotal, BorderLayout.EAST);
 
         add(panelInferior, BorderLayout.SOUTH);
+    }
+
+    private void actualizarTextoPieLicencia() {
+        LicenciaUtil.ResultadoVerificacion lic = LicenciaUtil.verificarEstado();
+        if (lic.getEstado() == LicenciaUtil.EstadoLicencia.PRUEBA_VIGENTE) {
+            lblCopyright.setText("v2.0.0 | Prueba: " + lic.getDiasRestantes() + " días restantes (Clic para Activar) | © 2026 Alex Software");
+            lblCopyright.setForeground(new Color(29, 78, 216));
+            lblCopyright.setToolTipText("Versión de prueba activa. Haz clic para ingresar tu llave comercial.");
+        } else {
+            lblCopyright.setText("v2.0.0 | © 2026 Alex Software. Todos los derechos reservados.");
+            lblCopyright.setForeground(new Color(110, 110, 110));
+            lblCopyright.setToolTipText("Licencia Comercial Activada — Haz clic para ver detalles");
+        }
+    }
+
+    private void aplicarRenderizadorStockBajo() {
+        Color fondoAlerta = new Color(254, 226, 226);
+        Color textoAlerta = new Color(153, 27, 27);
+
+        DefaultTableCellRenderer renderizador = new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+
+                int stock = 999;
+                try {
+                    Object valStock = table.getModel().getValueAt(row, 5);
+                    if (valStock != null) {
+                        stock = Integer.parseInt(valStock.toString().trim());
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+
+                if (isSelected) {
+                    c.setBackground(table.getSelectionBackground());
+                    c.setForeground(table.getSelectionForeground());
+                } else if (stock <= LIMITE_STOCK_BAJO) {
+                    c.setBackground(fondoAlerta);
+                    c.setForeground(textoAlerta);
+                } else {
+                    c.setBackground(table.getBackground());
+                    c.setForeground(table.getForeground());
+                }
+
+                if (stock == 0) {
+                    c.setFont(c.getFont().deriveFont(Font.BOLD));
+                } else {
+                    c.setFont(c.getFont().deriveFont(Font.PLAIN));
+                }
+
+                return c;
+            }
+        };
+
+        tablaProductos.setDefaultRenderer(Object.class, renderizador);
+    }
+
+    private void exportarCatalogoACSV() {
+        if (!esUsuarioPrivilegiado()) {
+            JOptionPane.showMessageDialog(this, "Acceso denegado: Solo usuarios MASTER o ADMIN pueden exportar el inventario.", "Seguridad", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Exportar Inventario");
+        chooser.setSelectedFile(new File("inventario_" + LocalDate.now() + ".csv"));
+        chooser.setFileFilter(new FileNameExtensionFilter("Archivos CSV (*.csv)", "csv"));
+
+        if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            File archivoDestino = chooser.getSelectedFile();
+            if (!archivoDestino.getName().toLowerCase().endsWith(".csv")) {
+                archivoDestino = new File(archivoDestino.getAbsolutePath() + ".csv");
+            }
+            try {
+                int totalExportados = servicio.exportarCatalogoCSV(archivoDestino);
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Se exportaron " + totalExportados + " producto(s) exitosamente a:\n" + archivoDestino.getAbsolutePath(),
+                        "Exportación Completada",
+                        JOptionPane.INFORMATION_MESSAGE
+                );
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Error al exportar el inventario:\n" + ex.getMessage(),
+                        "Error de Exportación",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
+    }
+
+    private void gestionarImportacionCSV() {
+        if (!esUsuarioPrivilegiado()) {
+            JOptionPane.showMessageDialog(this, "Acceso denegado: Solo usuarios MASTER o ADMIN pueden importar inventarios.", "Seguridad", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        Object[] opciones = {"Seleccionar archivo CSV", "Descargar Plantilla CSV", "Cancelar"};
+        int eleccion = JOptionPane.showOptionDialog(
+                this,
+                "<html><body style='width: 340px;'>"
+                        + "<b>Importación Masiva de Inventario (CSV)</b><br><br>"
+                        + "El archivo debe contener las columnas:<br>"
+                        + "<code>Codigo ; Nombre ; Descripcion ; Categoria ; Precio ; Existencias</code><br><br>"
+                        + "¿Qué desea hacer?</body></html>",
+                "Importar Inventario desde Archivo",
+                JOptionPane.YES_NO_CANCEL_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                opciones,
+                opciones[0]
+        );
+
+        if (eleccion == 1) {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Guardar Plantilla de Inventario");
+            chooser.setSelectedFile(new File("plantilla_inventario.csv"));
+            chooser.setFileFilter(new FileNameExtensionFilter("Archivos CSV (*.csv)", "csv"));
+
+            if (chooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File archivoDestino = chooser.getSelectedFile();
+                if (!archivoDestino.getName().toLowerCase().endsWith(".csv")) {
+                    archivoDestino = new File(archivoDestino.getAbsolutePath() + ".csv");
+                }
+                try {
+                    servicio.generarPlantillaCSV(archivoDestino);
+                    JOptionPane.showMessageDialog(this, "Plantilla guardada en:\n" + archivoDestino.getAbsolutePath(), "Plantilla Generada", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, "No se pudo guardar la plantilla:\n" + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        } else if (eleccion == 0) {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle("Seleccionar Archivo CSV de Productos");
+            chooser.setFileFilter(new FileNameExtensionFilter("Archivos CSV (*.csv)", "csv"));
+
+            if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File archivoOrigen = chooser.getSelectedFile();
+                try {
+                    sincronizarSesionActiva();
+                    InventarioService.ResultadoImportacion res = servicio.importarDesdeCSV(archivoOrigen);
+                    refrescarCatalogo();
+
+                    StringBuilder resumen = new StringBuilder();
+                    resumen.append("Proceso de importación finalizado.\n\n");
+                    resumen.append("• Productos importados: ").append(res.getImportados()).append("\n");
+                    resumen.append("• Filas omitidas / con error: ").append(res.getOmitidos()).append("\n");
+
+                    if (!res.getDetallesErrores().isEmpty()) {
+                        resumen.append("\nDetalle de filas omitidas (primeras 10):\n");
+                        int limite = Math.min(10, res.getDetallesErrores().size());
+                        for (int i = 0; i < limite; i++) {
+                            resumen.append(" - ").append(res.getDetallesErrores().get(i)).append("\n");
+                        }
+                    }
+
+                    JOptionPane.showMessageDialog(
+                            this,
+                            resumen.toString(),
+                            "Resultado de Importación",
+                            res.getOmitidos() > 0 ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE
+                    );
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, "Error al importar el archivo:\n" + ex.getMessage(), "Error de Importación", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
     }
 
     private JPanel crearBarraTituloPersonalizada() {
@@ -357,10 +560,18 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void mostrarAcercaDe() {
-        String mensaje = "<html><body style='width: 330px; font-family: Segoe UI, sans-serif;'>"
+        LicenciaUtil.ResultadoVerificacion lic = LicenciaUtil.verificarEstado();
+        boolean esTrial = lic.getEstado() == LicenciaUtil.EstadoLicencia.PRUEBA_VIGENTE;
+
+        String estadoTexto = esTrial
+                ? "<span style='color:#1d4ed8;'><b>Versión de Prueba (" + lic.getDiasRestantes() + " días restantes)</b></span>"
+                : "<span style='color:#15803d;'><b>Licencia Comercial Activada (Permanente)</b></span>";
+
+        String mensaje = "<html><body style='width: 340px; font-family: Segoe UI, sans-serif;'>"
                 + "<h2 style='margin-bottom: 4px;'>Sistema de Gestión de Inventario</h2>"
-                + "<p style='margin-top: 0; color: #555;'><b>Versión 2.0.0</b> (Edición Comercial)</p>"
+                + "<p style='margin-top: 0; color: #555;'><b>Versión 2.0.0</b> — " + estadoTexto + "</p>"
                 + "<hr>"
+                + "<p><b>ID de Equipo:</b> <code>" + lic.getHardwareId() + "</code></p>"
                 + "<p><b>Copyright © 2026 Alex Software.</b><br>"
                 + "Todos los derechos reservados.</p>"
                 + "<p style='font-size: 11px; color: #666;'>Queda prohibida la reproducción, distribución o "
@@ -368,12 +579,33 @@ public class FrmPrincipal extends JFrame {
                 + "<p style='font-size: 11px;'>Motor de datos: MongoDB | Runtime: Java 17</p>"
                 + "</body></html>";
 
-        JOptionPane.showMessageDialog(
-                this,
-                mensaje,
-                "Acerca de Sistema de Inventario v2.0.0",
-                JOptionPane.INFORMATION_MESSAGE
-        );
+        if (esTrial) {
+            Object[] opciones = {"Activar Licencia", "Cerrar"};
+            int resp = JOptionPane.showOptionDialog(
+                    this,
+                    mensaje,
+                    "Acerca de Sistema de Inventario v2.0.0",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.INFORMATION_MESSAGE,
+                    null,
+                    opciones,
+                    opciones[0]
+            );
+            if (resp == 0) {
+                DlgActivacionLicencia dlg = new DlgActivacionLicencia(this, lic, false);
+                dlg.setVisible(true);
+                if (dlg.isActivadoExitosamente()) {
+                    actualizarTextoPieLicencia();
+                }
+            }
+        } else {
+            JOptionPane.showMessageDialog(
+                    this,
+                    mensaje,
+                    "Acerca de Sistema de Inventario v2.0.0",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+        }
     }
 
     private void aplicarPermisosPorRol() {
@@ -388,6 +620,8 @@ public class FrmPrincipal extends JFrame {
                 btnEntrada.setEnabled(true);
                 btnSalida.setEnabled(true);
                 btnHistorial.setEnabled(true);
+                btnImportarCSV.setEnabled(true);
+                btnExportarCSV.setEnabled(true);
                 break;
             case "OPERADOR":
                 btnRegistrar.setEnabled(true);
@@ -396,6 +630,8 @@ public class FrmPrincipal extends JFrame {
                 btnEntrada.setEnabled(true);
                 btnSalida.setEnabled(true);
                 btnHistorial.setEnabled(true);
+                btnImportarCSV.setEnabled(false);
+                btnExportarCSV.setEnabled(false);
                 break;
             case "CONSULTA":
                 btnRegistrar.setEnabled(false);
@@ -403,7 +639,9 @@ public class FrmPrincipal extends JFrame {
                 btnEliminar.setEnabled(false);
                 btnEntrada.setEnabled(false);
                 btnSalida.setEnabled(false);
-                btnHistorial.setEnabled(true);
+                btnHistorial.setEnabled(false);
+                btnImportarCSV.setEnabled(false);
+                btnExportarCSV.setEnabled(false);
                 break;
             default:
                 btnRegistrar.setEnabled(false);
@@ -412,6 +650,8 @@ public class FrmPrincipal extends JFrame {
                 btnEntrada.setEnabled(false);
                 btnSalida.setEnabled(false);
                 btnHistorial.setEnabled(false);
+                btnImportarCSV.setEnabled(false);
+                btnExportarCSV.setEnabled(false);
                 break;
         }
     }
@@ -429,6 +669,7 @@ public class FrmPrincipal extends JFrame {
                     String.format("%.2f", p.calcularValorTotal())
             });
         }
+        tablaProductos.repaint();
         actualizarTotalInventario();
     }
 
@@ -479,6 +720,7 @@ public class FrmPrincipal extends JFrame {
                 servicio.registrarProducto(nuevo);
                 JOptionPane.showMessageDialog(this, "Producto registrado exitosamente en MongoDB.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
                 refrescarCatalogo();
+                ubicarProductoEnTabla(nuevo.getCodigo());
                 break;
             } catch (NumberFormatException e) {
                 JOptionPane.showMessageDialog(this, "Verifique los valores numéricos (precio y cantidad).", "Error", JOptionPane.WARNING_MESSAGE);
@@ -528,6 +770,7 @@ public class FrmPrincipal extends JFrame {
                     servicio.modificarProducto(actual);
                     JOptionPane.showMessageDialog(this, "Producto actualizado correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
                     refrescarCatalogo();
+                    ubicarProductoEnTabla(actual.getCodigo());
                     break;
                 } catch (NumberFormatException e) {
                     JOptionPane.showMessageDialog(this, "El precio debe ser un número válido.", "Error", JOptionPane.WARNING_MESSAGE);
@@ -541,7 +784,7 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void eliminarProductoSeleccionado() {
-        if (usuarioAutenticado != null && !"MASTER".equalsIgnoreCase(usuarioAutenticado.getRol()) && !"ADMIN".equalsIgnoreCase(usuarioAutenticado.getRol())) {
+        if (!esUsuarioPrivilegiado()) {
             JOptionPane.showMessageDialog(this, "Acceso denegado: Su rol no tiene privilegios para eliminar productos.", "Seguridad", JOptionPane.WARNING_MESSAGE);
             return;
         }
@@ -583,11 +826,30 @@ public class FrmPrincipal extends JFrame {
             if (esEntrada) {
                 servicio.registrarEntrada(codigo, cantidad, motivo);
                 JOptionPane.showMessageDialog(this, "Entrada registrada correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+                refrescarCatalogo();
+                ubicarProductoEnTabla(codigo);
             } else {
                 servicio.registrarSalida(codigo, cantidad, motivo);
                 JOptionPane.showMessageDialog(this, "Salida registrada correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+                refrescarCatalogo();
+                ubicarProductoEnTabla(codigo);
+
+                Producto actualizado = servicio.buscarPorCodigo(codigo);
+                if (actualizado.getCantidadDisponible() <= LIMITE_STOCK_BAJO) {
+                    String estado = actualizado.getCantidadDisponible() == 0
+                            ? "AGOTADO (0 unidades)"
+                            : "STOCK BAJO (" + actualizado.getCantidadDisponible() + " unidades)";
+                    JOptionPane.showMessageDialog(
+                            this,
+                            "¡Alerta de Inventario Crítico!\n\n"
+                                    + "El producto '" + actualizado.getNombre() + "' (" + actualizado.getCodigo() + ") "
+                                    + "ha quedado en " + estado + ".\n"
+                                    + "La fila permanecerá resaltada en rojo en el catálogo.",
+                            "Aviso de Stock Bajo (<= 5)",
+                            JOptionPane.WARNING_MESSAGE
+                    );
+                }
             }
-            refrescarCatalogo();
         } catch (NumberFormatException e) {
             JOptionPane.showMessageDialog(this, "La cantidad debe ser un número entero.", "Error", JOptionPane.ERROR_MESSAGE);
         } catch (StockInsuficienteException e) {
@@ -598,6 +860,11 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void abrirHistorialMovimientos() {
+        if (usuarioAutenticado != null && "CONSULTA".equalsIgnoreCase(usuarioAutenticado.getRol())) {
+            JOptionPane.showMessageDialog(this, "Acceso denegado: El rol CONSULTA no tiene permisos para visualizar el Kardex.", "Seguridad", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        sincronizarSesionActiva();
         DlgHistorialMovimientos dlg = new DlgHistorialMovimientos(this);
         dlg.setVisible(true);
     }
@@ -608,37 +875,47 @@ public class FrmPrincipal extends JFrame {
     }
 
     private void buscarProductoPorCodigo() {
-        String texto = JOptionPane.showInputDialog(this, "Ingrese el código o los primeros dígitos/caracteres a buscar:", "Búsqueda por Similitud de Código", JOptionPane.QUESTION_MESSAGE);
-        if (texto == null || texto.trim().isEmpty()) return;
-        try {
-            List<Producto> coincidencias = servicio.buscarPorSimilitudCodigo(texto.trim());
-            if (coincidencias.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "No se encontraron productos que coincidan con: \"" + texto.trim() + "\"", "Sin Coincidencias", JOptionPane.INFORMATION_MESSAGE);
-            } else {
-                cargarDatosTabla(coincidencias);
-                JOptionPane.showMessageDialog(this, "Se encontraron " + coincidencias.size() + " producto(s) coincidente(s).", "Resultado de Búsqueda", JOptionPane.INFORMATION_MESSAGE);
-            }
-        } catch (DatoInvalidoException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage(), "Aviso", JOptionPane.WARNING_MESSAGE);
+        DlgBusquedaProductos dlg = new DlgBusquedaProductos(this, servicio.listarProductos());
+        dlg.setVisible(true);
+
+        String codigoElegido = dlg.getCodigoSeleccionado();
+        if (codigoElegido != null) {
+            ubicarProductoEnTabla(codigoElegido);
         }
     }
 
-    private void mostrarAlertaStockBajo() {
-        long totalCriticos = servicio.contarProductosBajos(5);
+    private void ubicarProductoEnTabla(String codigoElegido) {
+        if (codigoElegido == null) return;
+        cmbFiltroCategoria.setSelectedItem("TODAS");
+        for (int i = 0; i < modeloTabla.getRowCount(); i++) {
+            if (codigoElegido.equalsIgnoreCase(String.valueOf(modeloTabla.getValueAt(i, 0)))) {
+                tablaProductos.setRowSelectionInterval(i, i);
+                tablaProductos.scrollRectToVisible(tablaProductos.getCellRect(i, 0, true));
+                break;
+            }
+        }
+    }
+
+    private void verificarYMostrarAlertaStockBajoAutomatica() {
+        long totalCriticos = servicio.contarProductosBajos(LIMITE_STOCK_BAJO);
         if (totalCriticos == 0) {
-            JOptionPane.showMessageDialog(this, "¡Inventario en orden! No se encontraron productos con existencias críticas (<= 5).", "Alerta de Stock Bajo", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
-        List<Producto> bajos = servicio.obtenerExistenciasBajasPaginadas(5, 50);
-        JDialog dialogoAlerta = new JDialog(this, "Alerta: Productos con Stock Bajo", true);
-        dialogoAlerta.setSize(600, 350);
+
+        List<Producto> bajos = servicio.obtenerExistenciasBajasPaginadas(LIMITE_STOCK_BAJO, 50);
+        JDialog dialogoAlerta = new JDialog(this, "Aviso Automático: Productos con Stock Bajo (<= 5)", true);
+        dialogoAlerta.setSize(640, 370);
         dialogoAlerta.setLocationRelativeTo(this);
         dialogoAlerta.setLayout(new BorderLayout(10, 10));
         SeguridadUtil.vincularCierreConEsc(dialogoAlerta, dialogoAlerta.getRootPane());
-        JLabel lblInfo = new JLabel(String.format("  Total de productos críticos: %d (Mostrando primeros %d)", totalCriticos, bajos.size()));
+
+        JPanel panelEncabezado = new JPanel(new BorderLayout());
+        panelEncabezado.setBorder(BorderFactory.createEmptyBorder(8, 12, 0, 12));
+        JLabel lblInfo = new JLabel(String.format("Atención: Se detectaron %d producto(s) con existencias críticas (<= 5 unidades):", totalCriticos));
         lblInfo.setFont(new Font("SansSerif", Font.BOLD, 13));
         lblInfo.setForeground(new Color(180, 0, 0));
-        dialogoAlerta.add(lblInfo, BorderLayout.NORTH);
+        panelEncabezado.add(lblInfo, BorderLayout.CENTER);
+        dialogoAlerta.add(panelEncabezado, BorderLayout.NORTH);
 
         String[] columnas = {"Código", "Nombre", "Categoría", "Stock Actual"};
         DefaultTableModel modeloBajos = new DefaultTableModel(columnas, 0) {
@@ -649,18 +926,44 @@ public class FrmPrincipal extends JFrame {
             modeloBajos.addRow(new Object[]{p.getCodigo(), p.getNombre(), p.getCategoria(), p.getCantidadDisponible()});
         }
         JTable tablaBajos = new JTable(modeloBajos);
+        tablaBajos.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        tablaBajos.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && tablaBajos.getSelectedRow() != -1) {
+                    String cod = String.valueOf(modeloBajos.getValueAt(tablaBajos.getSelectedRow(), 0));
+                    dialogoAlerta.dispose();
+                    ubicarProductoEnTabla(cod);
+                }
+            }
+        });
         dialogoAlerta.add(new JScrollPane(tablaBajos), BorderLayout.CENTER);
+
+        JPanel panelBoton = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 8));
+        JButton btnUbicar = new JButton("Ubicar en Catálogo");
+        btnUbicar.setMnemonic(KeyEvent.VK_U);
+        btnUbicar.addActionListener(e -> {
+            int fila = tablaBajos.getSelectedRow();
+            if (fila == -1) {
+                JOptionPane.showMessageDialog(dialogoAlerta, "Seleccione un producto de la lista.", "Aviso", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            String cod = String.valueOf(modeloBajos.getValueAt(fila, 0));
+            dialogoAlerta.dispose();
+            ubicarProductoEnTabla(cod);
+        });
+        panelBoton.add(btnUbicar);
 
         JButton btnCerrar = new JButton("Entendido");
         btnCerrar.setMnemonic(KeyEvent.VK_E);
         btnCerrar.setDisplayedMnemonicIndex(0);
         btnCerrar.addActionListener(e -> dialogoAlerta.dispose());
-
-        JPanel panelBoton = new JPanel();
         panelBoton.add(btnCerrar);
+
         dialogoAlerta.add(panelBoton, BorderLayout.SOUTH);
         SeguridadUtil.habilitarNavegacionFlechas(panelBoton);
         dialogoAlerta.setVisible(true);
+        tablaProductos.repaint();
     }
 
     private void cerrarSesion() {

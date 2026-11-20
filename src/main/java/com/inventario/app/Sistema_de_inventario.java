@@ -2,6 +2,8 @@ package com.inventario.app;
 
 import com.inventario.app.conexion.ConexionMongoDB;
 import com.inventario.app.conexion.InstaladorMongoDB;
+import com.inventario.app.utilidades.LicenciaUtil;
+import com.inventario.app.vistas.DlgActivacionLicencia;
 import com.inventario.app.vistas.FrmLogin;
 import javax.swing.SwingUtilities;
 
@@ -14,15 +16,20 @@ public class Sistema_de_inventario {
             ConexionMongoDB.getDatabase();
         }
 
-        // 3. Muestra la interfaz gráfica de inicio de sesión
-        SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                FrmLogin login = new FrmLogin();
-                login.setVisible(true);
+        // 3. Valida el estado de la licencia (30 días de prueba o activación permanente) y lanza la interfaz
+        SwingUtilities.invokeLater(() -> {
+            LicenciaUtil.ResultadoVerificacion lic = LicenciaUtil.verificarEstado();
+            if (!lic.puedeUsarSistema()) {
+                DlgActivacionLicencia dlgActivacion = new DlgActivacionLicencia(null, lic, true);
+                dlgActivacion.setVisible(true);
+                if (!dlgActivacion.isActivadoExitosamente()) {
+                    System.exit(0);
+                    return;
+                }
             }
+
+            FrmLogin login = new FrmLogin();
+            login.setVisible(true);
         });
     }
 }
-
-
